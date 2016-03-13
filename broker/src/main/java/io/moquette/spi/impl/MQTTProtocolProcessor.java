@@ -15,23 +15,26 @@
  */
 package io.moquette.spi.impl;
 
-import static io.moquette.parser.netty.Utils.VERSION_3_1;
-import static io.moquette.parser.netty.Utils.VERSION_3_1_1;
-
 import java.nio.ByteBuffer;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.List;
-import java.util.NoSuchElementException;
-import java.util.Properties;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.TimeUnit;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import io.moquette.server.ConnectionDescriptor;
+import io.moquette.server.netty.AutoFlushHandler;
+import io.moquette.server.netty.NettyUtils;
+import io.moquette.spi.ClientSession;
+import io.moquette.spi.IMatchingCondition;
+import io.moquette.spi.IMessagesStore;
+import io.moquette.spi.ISessionsStore;
+import io.moquette.spi.security.IAuthenticator;
+import io.moquette.spi.security.IAuthorizator;
+import io.moquette.spi.impl.subscriptions.SubscriptionsStore;
+import io.moquette.spi.impl.subscriptions.Subscription;
 
+import static io.moquette.parser.netty.Utils.VERSION_3_1;
+import static io.moquette.parser.netty.Utils.VERSION_3_1_1;
 import io.moquette.parser.proto.messages.AbstractMessage;
 import io.moquette.parser.proto.messages.AbstractMessage.QOSType;
 import io.moquette.parser.proto.messages.ConnAckMessage;
@@ -45,34 +48,21 @@ import io.moquette.parser.proto.messages.SubAckMessage;
 import io.moquette.parser.proto.messages.SubscribeMessage;
 import io.moquette.parser.proto.messages.UnsubAckMessage;
 import io.moquette.parser.proto.messages.UnsubscribeMessage;
-import io.moquette.server.ConnectionDescriptor;
-import io.moquette.server.netty.AutoFlushHandler;
-import io.moquette.server.netty.NettyUtils;
-import io.moquette.spi.ClientSession;
-import io.moquette.spi.IMatchingCondition;
-import io.moquette.spi.IMessagesStore;
-import io.moquette.spi.ISessionsStore;
-import io.moquette.spi.impl.kafka.ConsumerGroup;
-import io.moquette.spi.impl.subscriptions.Subscription;
-import io.moquette.spi.impl.subscriptions.SubscriptionsStore;
-import io.moquette.spi.security.IAuthenticator;
-import io.moquette.spi.security.IAuthorizator;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelPipeline;
 import io.netty.handler.timeout.IdleStateHandler;
-import kafka.javaapi.producer.Producer;
-import kafka.producer.KeyedMessage;
-import kafka.producer.ProducerConfig;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
- * Class responsible to handle the logic of Kafka protocol it's the director of
+ * Class responsible to handle the logic of MQTT protocol it's the director of
  * the protocol execution. 
  * 
  * Used by the front facing class SimpleMessaging.
  * 
  * @author andrea
  */
-public class ProtocolProcessor {
+public class MQTTProtocolProcessor {
 
     static final class WillMessage {
         private final String topic;
@@ -105,7 +95,7 @@ public class ProtocolProcessor {
         
     }
     
-    private static final Logger LOG = LoggerFactory.getLogger(ProtocolProcessor.class);
+    private static final Logger LOG = LoggerFactory.getLogger(MQTTProtocolProcessor.class);
     
     protected ConcurrentMap<String, ConnectionDescriptor> m_clientIDs;
     private SubscriptionsStore subscriptions;
@@ -118,12 +108,8 @@ public class ProtocolProcessor {
 
     //maps clientID to Will testament, if specified on CONNECT
     private ConcurrentMap<String, WillMessage> m_willStore = new ConcurrentHashMap<>();
-
-	private Producer<byte[], byte[]> producer;
-
-	private ConsumerGroup consumerGroup;
     
-    ProtocolProcessor() {}
+    MQTTProtocolProcessor() {}
 
     /**
      * @param subscriptions the subscription store where are stored all the existing
@@ -149,33 +135,6 @@ public class ProtocolProcessor {
         m_authenticator = authenticator;
         m_messagesStore = storageService;
         m_sessionsStore = sessionsStore;
-        
-        Properties props = new Properties();
-        props.put("metadata.broker.list", "nodo1:9092,nodo2:9092 ");
-//      props.put("serializer.class", "kafka.serializer.DefaultEncoder");
-//      props.put("partitioner.class", "org.apache.kafka.clients.producer.internals.DefaultPartitioner");
-        /**
-        0, which means that the producer never waits for an acknowledgement 
-        	from the broker (the same behavior as 0.7). This option provides 
-        	the lowest latency but the weakest durability guarantees (some 
-        	data will be lost when a server fails).
-        1, which means that the producer gets an acknowledgement after the 
-        	leader replica has received the data. This option provides better 
-        	durability as the client waits until the server acknowledges the 
-        	request as successful (only messages that were written to the 
-        	now-dead leader but not yet replicated will be lost).
-        -1, which means that the producer gets an acknowledgement after all 
-        	in-sync replicas have received the data. This option provides the 
-        	best durability, we guarantee that no messages will be lost as 
-        	long as at least one in sync replica remains.
- 		**/
-        props.put("request.required.acks", "1");
-        ProducerConfig config = new ProducerConfig(props);
-        producer = new Producer<byte[], byte[]>(config);
-        
-        String zooKeeper = "nodo1:2181,nodo4:2181,nodo6:2181";
-		String groupId = "any";
-        consumerGroup = new ConsumerGroup(zooKeeper, groupId, this);
     }
 
     public void processConnect(Channel channel, ConnectMessage msg) {
@@ -324,12 +283,8 @@ public class ProtocolProcessor {
         LOG.info("republishing stored messages to client <{}>", clientSession.clientID);
         for (IMessagesStore.StoredMessage pubEvt : publishedEvents) {
             //TODO put in flight zone
-            KeyedMessage<byte[], byte[]> message = new KeyedMessage<byte[], byte[]>(
-            		pubEvt.getTopic().replaceAll("/", "_bs_"),
-					(pubEvt.getMessageID() == null ? pubEvt.getClientID() : pubEvt.getClientID() + "-" + pubEvt.getMessageID()).getBytes(), 
-					pubEvt.getPayload().array());
-			producer.send(message);
-            
+            directSend(clientSession, pubEvt.getTopic(), pubEvt.getQos(),
+                    pubEvt.getMessage(), false, pubEvt.getMessageID());
             clientSession.removeEnqueued(pubEvt.getGuid());
         }
     }
@@ -355,6 +310,12 @@ public class ProtocolProcessor {
         stored.setMessageID(msg.getMessageID());
         return stored;
     }
+
+    private static IMessagesStore.StoredMessage asStoredMessage(WillMessage will) {
+        IMessagesStore.StoredMessage pub = new IMessagesStore.StoredMessage(will.getPayload().array(), will.getQos(), will.getTopic());
+        pub.setRetained(will.isRetained());
+        return pub;
+    }
     
     public void processPublish(Channel channel, PublishMessage msg) {
         LOG.trace("PUB --PUBLISH--> SRV executePublish invoked with {}", msg);
@@ -374,22 +335,12 @@ public class ProtocolProcessor {
         IMessagesStore.StoredMessage toStoreMsg = asStoredMessage(msg);
         toStoreMsg.setClientID(clientID);
         if (qos == AbstractMessage.QOSType.MOST_ONE) { //QoS0
-			KeyedMessage<byte[], byte[]> message = new KeyedMessage<byte[], byte[]>(
-					topic.replaceAll("/", "_bs_"),
-					(messageID == null ? clientID : clientID + "-" + messageID).getBytes(), 
-					msg.getPayload().array());
-			producer.send(message);
+            route2Subscribers(toStoreMsg);
         } else if (qos == AbstractMessage.QOSType.LEAST_ONE) { //QoS1
-        	KeyedMessage<byte[], byte[]> message = new KeyedMessage<byte[], byte[]>(
-					topic.replaceAll("/", "_bs_"),
-					(messageID == null ? clientID : clientID + "-" + messageID).getBytes(), 
-					msg.getPayload().array());
-			producer.send(message);
-			
+            route2Subscribers(toStoreMsg);
             sendPubAck(clientID, messageID);
             LOG.debug("replying with PubAck to MSG ID {}", messageID);
         } else if (qos == AbstractMessage.QOSType.EXACTLY_ONCE) { //QoS2
-            guid = m_messagesStore.storePublishForFuture(toStoreMsg);
             sendPubRec(clientID, messageID);
             //Next the client will send us a pub rel
             //NB publish to subscribers for QoS 2 happen upon PUBREL from publisher
@@ -427,11 +378,14 @@ public class ProtocolProcessor {
         final String topic = msg.getTopicName();
         LOG.info("embedded PUBLISH on topic <{}> with QoS {}", topic, qos);
 
-        KeyedMessage<byte[], byte[]> message = new KeyedMessage<byte[], byte[]>(
-				topic.replaceAll("/", "_bs_"),
-				("BROKER_SELF" + "-" + 1).getBytes(), 
-				msg.getPayload().array());
-		producer.send(message);
+        String guid = null;
+        IMessagesStore.StoredMessage toStoreMsg = asStoredMessage(msg);
+        toStoreMsg.setClientID("BROKER_SELF");
+        toStoreMsg.setMessageID(1);
+        if (qos == AbstractMessage.QOSType.EXACTLY_ONCE) { //QoS2
+            guid = m_messagesStore.storePublishForFuture(toStoreMsg);
+        }
+        route2Subscribers(toStoreMsg);
 
         if (!msg.isRetainFlag()) {
             return;
@@ -440,14 +394,6 @@ public class ProtocolProcessor {
             //QoS == 0 && retain => clean old retained
             m_messagesStore.cleanRetained(topic);
             return;
-        }
-        
-        String guid = null;
-        IMessagesStore.StoredMessage toStoreMsg = asStoredMessage(msg);
-        toStoreMsg.setClientID("BROKER_SELF");
-        toStoreMsg.setMessageID(1);
-        if (qos == AbstractMessage.QOSType.EXACTLY_ONCE) { //QoS2
-            guid = m_messagesStore.storePublishForFuture(toStoreMsg);
         }
         if (guid == null) {
             //before wasn't stored
@@ -466,26 +412,25 @@ public class ProtocolProcessor {
         if (will.getQos() != AbstractMessage.QOSType.MOST_ONE) {
             messageId = m_sessionsStore.nextPacketID(clientID);
         }
-        
-        KeyedMessage<byte[], byte[]> message = new KeyedMessage<byte[], byte[]>(
-        		will.getTopic().replaceAll("/", "_bs_"), 
-        		(messageId == null ? clientID : clientID + "-" + messageId).getBytes(), 
-        		will.getPayload().array());
-        producer.send(message);
+
+        IMessagesStore.StoredMessage tobeStored = asStoredMessage(will);
+        tobeStored.setClientID(clientID);
+        tobeStored.setMessageID(messageId);
+        route2Subscribers(tobeStored);
     }
 
 
     /**
      * Flood the subscribers with the message to notify. MessageID is optional and should only used for QoS 1 and 2
      * */
-    public synchronized void route2Subscribers(Set<Subscription> subscriptions, IMessagesStore.StoredMessage pubMsg) {
+    void route2Subscribers(IMessagesStore.StoredMessage pubMsg) {
         final String topic = pubMsg.getTopic();
         final AbstractMessage.QOSType publishingQos = pubMsg.getQos();
         final ByteBuffer origMessage = pubMsg.getMessage();
         LOG.debug("route2Subscribers republishing to existing subscribers that matches the topic {}", topic);
         if (LOG.isTraceEnabled()) {
             LOG.trace("content <{}>", DebugUtils.payload2Str(origMessage));
-            LOG.trace("subscription tree {}", subscriptions);
+            LOG.trace("subscription tree {}", subscriptions.dumpTree());
         }
         //if QoS 1 or 2 store the message
         String guid = null;
@@ -493,7 +438,7 @@ public class ProtocolProcessor {
             guid = m_messagesStore.storePublishForFuture(pubMsg);
         }
 
-        for (final Subscription sub : subscriptions) {
+        for (final Subscription sub : subscriptions.matches(topic)) {
             AbstractMessage.QOSType qos = publishingQos;
             if (qos.byteValue() > sub.getRequestedQos().byteValue()) {
                 qos = sub.getRequestedQos();
@@ -610,12 +555,7 @@ public class ProtocolProcessor {
         ClientSession targetSession = m_sessionsStore.sessionForClient(clientID);
         verifyToActivate(clientID, targetSession);
         IMessagesStore.StoredMessage evt = targetSession.storedMessage(messageID);
-        
-        KeyedMessage<byte[], byte[]> message = new KeyedMessage<byte[], byte[]>(
-        		evt.getTopic().replaceAll("/", "_bs_"), 
-        		(clientID + "-" + messageID).getBytes(), 
-        		evt.getPayload().array());
-        producer.send(message);
+        route2Subscribers(evt);
 
         if (evt.isRetained()) {
             final String topic = evt.getTopic();
@@ -724,7 +664,6 @@ public class ProtocolProcessor {
 
             subscriptions.removeSubscription(topic, clientID);
             clientSession.unsubscribeFrom(topic);
-            consumerGroup.unsubscribe(topic, clientID);
             m_interceptor.notifyTopicUnsubscribed(topic, clientID);
         }
 
@@ -780,7 +719,6 @@ public class ProtocolProcessor {
     
     private boolean subscribeSingleTopic(final Subscription newSubscription) {
         subscriptions.add(newSubscription.asClientTopicCouple());
-        consumerGroup.subscribe(newSubscription, 3);
 
         //scans retained messages to be published to the new subscription
         //TODO this is ugly, it does a linear scan on potential big dataset
@@ -795,12 +733,10 @@ public class ProtocolProcessor {
         for (IMessagesStore.StoredMessage storedMsg : messages) {
             //fire the as retained the message
             LOG.debug("send publish message for topic {}", newSubscription.getTopicFilter());
-            
-            KeyedMessage<byte[], byte[]> message = new KeyedMessage<byte[], byte[]>(
-            		storedMsg.getTopic().replaceAll("/", "_bs_"),
-					(storedMsg.getMessageID() == null ? storedMsg.getClientID() : storedMsg.getClientID() + "-" + storedMsg.getMessageID()).getBytes(), 
-					storedMsg.getPayload().array());
-			producer.send(message);
+            //forwardPublishQoS0(newSubscription.getClientId(), storedMsg.getTopic(), storedMsg.getQos(), storedMsg.getPayload(), true);
+            Integer packetID = storedMsg.getQos() == QOSType.MOST_ONE ? null :
+                    targetSession.nextPacketId();
+            directSend(targetSession, storedMsg.getTopic(), storedMsg.getQos(), storedMsg.getPayload(), true, packetID);
         }
 
         //notify the Observables

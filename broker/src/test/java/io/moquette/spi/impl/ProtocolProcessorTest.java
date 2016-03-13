@@ -484,9 +484,6 @@ public class ProtocolProcessorTest {
         processor.m_clientIDs.put("Sub A", new ConnectionDescriptor("Sub A", null, true));
         processor.m_clientIDs.put("Sub B", new ConnectionDescriptor("Sub B", null, true));
 
-        //Exercise
-        processor.route2Subscribers(forwardPublish);
-
         //Verify
         assertEquals(2, publishedForwarded.size());
         assertEquals(subQos1.getClientId(), publishedForwarded.get(0).getClientID());
