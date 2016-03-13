@@ -79,7 +79,7 @@ public class ProtocolProcessor_CONNECT_Test {
         subscriptions.init(m_sessionStore);
         m_processor = new ProtocolProcessor();
         m_processor.init(subscriptions, m_messagesStore, m_sessionStore, m_mockAuthenticator, true,
-                new PermitAllAuthorizator(), ProtocolProcessorTest.NO_OBSERVERS_INTERCEPTOR);
+                new PermitAllAuthorizator(), ProtocolProcessorTest.NO_OBSERVERS_INTERCEPTOR, null, null);
     }
 
     @Test
@@ -171,7 +171,7 @@ public class ProtocolProcessor_CONNECT_Test {
     public void prohibitAnonymousClient() {
         connMsg.setClientID("123");
         m_processor.init(subscriptions, m_messagesStore, m_sessionStore, m_mockAuthenticator, false,
-                new PermitAllAuthorizator(), ProtocolProcessorTest.NO_OBSERVERS_INTERCEPTOR);
+                new PermitAllAuthorizator(), ProtocolProcessorTest.NO_OBSERVERS_INTERCEPTOR, null, null);
 
         //Exercise
         m_processor.processConnect(m_session, connMsg);
@@ -186,7 +186,7 @@ public class ProtocolProcessor_CONNECT_Test {
         connMsg.setUserFlag(true);
         connMsg.setUsername(ProtocolProcessorTest.TEST_USER + "_fake");
         m_processor.init(subscriptions, m_messagesStore, m_sessionStore, m_mockAuthenticator, false,
-                new PermitAllAuthorizator(), ProtocolProcessorTest.NO_OBSERVERS_INTERCEPTOR);
+                new PermitAllAuthorizator(), ProtocolProcessorTest.NO_OBSERVERS_INTERCEPTOR, null, null);
 
         //Exercise
         m_processor.processConnect(m_session, connMsg);
@@ -199,7 +199,7 @@ public class ProtocolProcessor_CONNECT_Test {
     public void acceptAnonymousClient() {
         connMsg.setClientID("123");
         m_processor.init(subscriptions, m_messagesStore, m_sessionStore, m_mockAuthenticator, true,
-                new PermitAllAuthorizator(), ProtocolProcessorTest.NO_OBSERVERS_INTERCEPTOR);
+                new PermitAllAuthorizator(), ProtocolProcessorTest.NO_OBSERVERS_INTERCEPTOR, null, null);
 
         //Exercise
         m_processor.processConnect(m_session, connMsg);
@@ -211,7 +211,7 @@ public class ProtocolProcessor_CONNECT_Test {
     @Test
     public void connectWithCleanSessionUpdateClientSession() throws InterruptedException {
         m_processor.init(subscriptions, m_messagesStore, m_sessionStore, m_mockAuthenticator, true,
-                new PermitAllAuthorizator(), ProtocolProcessorTest.NO_OBSERVERS_INTERCEPTOR);
+                new PermitAllAuthorizator(), ProtocolProcessorTest.NO_OBSERVERS_INTERCEPTOR, null, null);
 
         //first connect with clean session true
         connMsg.setClientID("123");

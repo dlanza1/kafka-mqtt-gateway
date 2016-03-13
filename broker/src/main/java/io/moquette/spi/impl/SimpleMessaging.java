@@ -20,11 +20,15 @@ import io.moquette.spi.IMessagesStore;
 import io.moquette.interception.InterceptHandler;
 import io.moquette.server.config.IConfig;
 import io.moquette.spi.ISessionsStore;
+import io.moquette.spi.impl.kafka.ConsumerGroup;
 import io.moquette.spi.impl.security.*;
 import io.moquette.spi.impl.subscriptions.SubscriptionsStore;
 import io.moquette.spi.persistence.MapDBPersistentStore;
 import io.moquette.spi.security.IAuthenticator;
 import io.moquette.spi.security.IAuthorizator;
+import kafka.javaapi.producer.Producer;
+import kafka.producer.ProducerConfig;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -34,6 +38,7 @@ import java.lang.reflect.Method;
 import java.text.ParseException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Properties;
 
 /**
  *
@@ -142,8 +147,43 @@ public class SimpleMessaging {
 
         }
 
+    	Properties props_kafka = new Properties();
+    	props_kafka.put("metadata.broker.list", "nodo1:9092,nodo2:9092 ");
+//      props_kafka.put("serializer.class", "kafka.serializer.DefaultEncoder");
+//      props_kafka.put("partitioner.class", "org.apache.kafka.clients.producer.internals.DefaultPartitioner");
+        /**
+        0, which means that the producer never waits for an acknowledgement 
+        	from the broker (the same behavior as 0.7). This option provides 
+        	the lowest latency but the weakest durability guarantees (some 
+        	data will be lost when a server fails).
+        1, which means that the producer gets an acknowledgement after the 
+        	leader replica has received the data. This option provides better 
+        	durability as the client waits until the server acknowledges the 
+        	request as successful (only messages that were written to the 
+        	now-dead leader but not yet replicated will be lost).
+        -1, which means that the producer gets an acknowledgement after all 
+        	in-sync replicas have received the data. This option provides the 
+        	best durability, we guarantee that no messages will be lost as 
+        	long as at least one in sync replica remains.
+ 		**/
+    	props_kafka.put("request.required.acks", "1");
+        ProducerConfig config = new ProducerConfig(props_kafka);
+        Producer<byte[], byte[]> producer = new Producer<byte[], byte[]>(config);
+        
+        String zooKeeper = "nodo1:2181,nodo4:2181,nodo6:2181";
+		String groupId = "any";
+        ConsumerGroup consumerGroup = new ConsumerGroup(zooKeeper, groupId, m_processor);
+        
         boolean allowAnonymous = Boolean.parseBoolean(props.getProperty(BrokerConstants.ALLOW_ANONYMOUS_PROPERTY_NAME, "true"));
-        m_processor.init(subscriptions, messagesStore, sessionsStore, authenticator, allowAnonymous, authorizator, m_interceptor);
+        m_processor.init(subscriptions, 
+        		messagesStore, 
+        		sessionsStore,
+        		authenticator, 
+        		allowAnonymous, 
+        		authorizator, 
+        		m_interceptor,
+        		producer,
+        		consumerGroup);
         return m_processor;
     }
     
@@ -184,5 +224,6 @@ public class SimpleMessaging {
 
     public void shutdown() {
         this.m_mapStorage.close();
+        this.m_processor.shutdown();
     }
 }

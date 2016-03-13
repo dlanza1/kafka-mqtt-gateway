@@ -18,12 +18,15 @@ package io.moquette.spi.impl;
 import static io.moquette.parser.netty.Utils.VERSION_3_1;
 import static io.moquette.parser.netty.Utils.VERSION_3_1_1;
 
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.ObjectOutput;
+import java.io.ObjectOutputStream;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.NoSuchElementException;
-import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -51,6 +54,7 @@ import io.moquette.server.netty.NettyUtils;
 import io.moquette.spi.ClientSession;
 import io.moquette.spi.IMatchingCondition;
 import io.moquette.spi.IMessagesStore;
+import io.moquette.spi.IMessagesStore.StoredMessage;
 import io.moquette.spi.ISessionsStore;
 import io.moquette.spi.impl.kafka.ConsumerGroup;
 import io.moquette.spi.impl.subscriptions.Subscription;
@@ -62,7 +66,6 @@ import io.netty.channel.ChannelPipeline;
 import io.netty.handler.timeout.IdleStateHandler;
 import kafka.javaapi.producer.Producer;
 import kafka.producer.KeyedMessage;
-import kafka.producer.ProducerConfig;
 
 /**
  * Class responsible to handle the logic of Kafka protocol it's the director of
@@ -135,11 +138,18 @@ public class ProtocolProcessor {
      * @param allowAnonymous true connection to clients without credentials.
      * @param authorizator used to apply ACL policies to publishes and subscriptions.
      * @param interceptor to notify events to an intercept handler
+     * @param consumerGroup2 
+     * @param producer2 
      */
-    void init(SubscriptionsStore subscriptions, IMessagesStore storageService,
+    void init(SubscriptionsStore subscriptions, 
+    		  IMessagesStore storageService,
               ISessionsStore sessionsStore,
               IAuthenticator authenticator,
-              boolean allowAnonymous, IAuthorizator authorizator, BrokerInterceptor interceptor) {
+              boolean allowAnonymous, 
+              IAuthorizator authorizator, 
+              BrokerInterceptor interceptor, 
+              Producer<byte[], byte[]> producer, 
+              ConsumerGroup consumerGroup) {
         this.m_clientIDs = new ConcurrentHashMap<>();
         this.m_interceptor = interceptor;
         this.subscriptions = subscriptions;
@@ -149,33 +159,8 @@ public class ProtocolProcessor {
         m_authenticator = authenticator;
         m_messagesStore = storageService;
         m_sessionsStore = sessionsStore;
-        
-        Properties props = new Properties();
-        props.put("metadata.broker.list", "nodo1:9092,nodo2:9092 ");
-//      props.put("serializer.class", "kafka.serializer.DefaultEncoder");
-//      props.put("partitioner.class", "org.apache.kafka.clients.producer.internals.DefaultPartitioner");
-        /**
-        0, which means that the producer never waits for an acknowledgement 
-        	from the broker (the same behavior as 0.7). This option provides 
-        	the lowest latency but the weakest durability guarantees (some 
-        	data will be lost when a server fails).
-        1, which means that the producer gets an acknowledgement after the 
-        	leader replica has received the data. This option provides better 
-        	durability as the client waits until the server acknowledges the 
-        	request as successful (only messages that were written to the 
-        	now-dead leader but not yet replicated will be lost).
-        -1, which means that the producer gets an acknowledgement after all 
-        	in-sync replicas have received the data. This option provides the 
-        	best durability, we guarantee that no messages will be lost as 
-        	long as at least one in sync replica remains.
- 		**/
-        props.put("request.required.acks", "1");
-        ProducerConfig config = new ProducerConfig(props);
-        producer = new Producer<byte[], byte[]>(config);
-        
-        String zooKeeper = "nodo1:2181,nodo4:2181,nodo6:2181";
-		String groupId = "any";
-        consumerGroup = new ConsumerGroup(zooKeeper, groupId, this);
+        this.producer = producer;
+        this.consumerGroup = consumerGroup;
     }
 
     public void processConnect(Channel channel, ConnectMessage msg) {
@@ -323,18 +308,42 @@ public class ProtocolProcessor {
 
         LOG.info("republishing stored messages to client <{}>", clientSession.clientID);
         for (IMessagesStore.StoredMessage pubEvt : publishedEvents) {
-            //TODO put in flight zone
-            KeyedMessage<byte[], byte[]> message = new KeyedMessage<byte[], byte[]>(
-            		pubEvt.getTopic().replaceAll("/", "_bs_"),
-					(pubEvt.getMessageID() == null ? pubEvt.getClientID() : pubEvt.getClientID() + "-" + pubEvt.getMessageID()).getBytes(), 
-					pubEvt.getPayload().array());
-			producer.send(message);
+			producer.send(getBytes(pubEvt));
             
             clientSession.removeEnqueued(pubEvt.getGuid());
         }
     }
     
-    public void processPubAck(Channel channel, PubAckMessage msg) {
+    private KeyedMessage<byte[], byte[]> getBytes(StoredMessage pubEvt) {
+    	ByteArrayOutputStream bos = new ByteArrayOutputStream();
+    	ObjectOutput out = null;
+    	byte[] payload = null;
+    	try {
+			out = new ObjectOutputStream(bos);
+			out.writeObject(pubEvt);
+			payload = bos.toByteArray();
+		} catch (IOException e) {
+			e.printStackTrace();
+		} finally {
+			try {
+				if (out != null) {
+					out.close();
+				}
+			} catch (IOException ex) {
+			}
+			try {
+				bos.close();
+			} catch (IOException ex) {
+			}
+		}
+    	
+		return new KeyedMessage<byte[], byte[]>(
+        		pubEvt.getTopic().replaceAll("/", "."),
+				(pubEvt.getMessageID() == null ? pubEvt.getClientID() : pubEvt.getClientID() + "-" + pubEvt.getMessageID()).getBytes(), 
+				payload);
+	}
+
+	public void processPubAck(Channel channel, PubAckMessage msg) {
         String clientID = NettyUtils.clientID(channel);
         int messageID = msg.getMessageID();
         //Remove the message from message store
@@ -356,6 +365,12 @@ public class ProtocolProcessor {
         return stored;
     }
     
+    private static IMessagesStore.StoredMessage asStoredMessage(WillMessage will) {
+        IMessagesStore.StoredMessage pub = new IMessagesStore.StoredMessage(will.getPayload().array(), will.getQos(), will.getTopic());
+        pub.setRetained(will.isRetained());
+        return pub;
+    }
+    
     public void processPublish(Channel channel, PublishMessage msg) {
         LOG.trace("PUB --PUBLISH--> SRV executePublish invoked with {}", msg);
         String clientID = NettyUtils.clientID(channel);
@@ -374,18 +389,9 @@ public class ProtocolProcessor {
         IMessagesStore.StoredMessage toStoreMsg = asStoredMessage(msg);
         toStoreMsg.setClientID(clientID);
         if (qos == AbstractMessage.QOSType.MOST_ONE) { //QoS0
-			KeyedMessage<byte[], byte[]> message = new KeyedMessage<byte[], byte[]>(
-					topic.replaceAll("/", "_bs_"),
-					(messageID == null ? clientID : clientID + "-" + messageID).getBytes(), 
-					msg.getPayload().array());
-			producer.send(message);
+			producer.send(getBytes(toStoreMsg));
         } else if (qos == AbstractMessage.QOSType.LEAST_ONE) { //QoS1
-        	KeyedMessage<byte[], byte[]> message = new KeyedMessage<byte[], byte[]>(
-					topic.replaceAll("/", "_bs_"),
-					(messageID == null ? clientID : clientID + "-" + messageID).getBytes(), 
-					msg.getPayload().array());
-			producer.send(message);
-			
+        	producer.send(getBytes(toStoreMsg));
             sendPubAck(clientID, messageID);
             LOG.debug("replying with PubAck to MSG ID {}", messageID);
         } else if (qos == AbstractMessage.QOSType.EXACTLY_ONCE) { //QoS2
@@ -427,11 +433,14 @@ public class ProtocolProcessor {
         final String topic = msg.getTopicName();
         LOG.info("embedded PUBLISH on topic <{}> with QoS {}", topic, qos);
 
-        KeyedMessage<byte[], byte[]> message = new KeyedMessage<byte[], byte[]>(
-				topic.replaceAll("/", "_bs_"),
-				("BROKER_SELF" + "-" + 1).getBytes(), 
-				msg.getPayload().array());
-		producer.send(message);
+        String guid = null;
+        IMessagesStore.StoredMessage toStoreMsg = asStoredMessage(msg);
+        toStoreMsg.setClientID("BROKER_SELF");
+        toStoreMsg.setMessageID(1);
+        if (qos == AbstractMessage.QOSType.EXACTLY_ONCE) { //QoS2
+            guid = m_messagesStore.storePublishForFuture(toStoreMsg);
+        }
+		producer.send(getBytes(toStoreMsg));
 
         if (!msg.isRetainFlag()) {
             return;
@@ -440,14 +449,6 @@ public class ProtocolProcessor {
             //QoS == 0 && retain => clean old retained
             m_messagesStore.cleanRetained(topic);
             return;
-        }
-        
-        String guid = null;
-        IMessagesStore.StoredMessage toStoreMsg = asStoredMessage(msg);
-        toStoreMsg.setClientID("BROKER_SELF");
-        toStoreMsg.setMessageID(1);
-        if (qos == AbstractMessage.QOSType.EXACTLY_ONCE) { //QoS2
-            guid = m_messagesStore.storePublishForFuture(toStoreMsg);
         }
         if (guid == null) {
             //before wasn't stored
@@ -467,11 +468,10 @@ public class ProtocolProcessor {
             messageId = m_sessionsStore.nextPacketID(clientID);
         }
         
-        KeyedMessage<byte[], byte[]> message = new KeyedMessage<byte[], byte[]>(
-        		will.getTopic().replaceAll("/", "_bs_"), 
-        		(messageId == null ? clientID : clientID + "-" + messageId).getBytes(), 
-        		will.getPayload().array());
-        producer.send(message);
+        IMessagesStore.StoredMessage tobeStored = asStoredMessage(will);
+        tobeStored.setClientID(clientID);
+        tobeStored.setMessageID(messageId);
+        producer.send(getBytes(tobeStored));
     }
 
 
@@ -611,11 +611,7 @@ public class ProtocolProcessor {
         verifyToActivate(clientID, targetSession);
         IMessagesStore.StoredMessage evt = targetSession.storedMessage(messageID);
         
-        KeyedMessage<byte[], byte[]> message = new KeyedMessage<byte[], byte[]>(
-        		evt.getTopic().replaceAll("/", "_bs_"), 
-        		(clientID + "-" + messageID).getBytes(), 
-        		evt.getPayload().array());
-        producer.send(message);
+        producer.send(getBytes(evt));
 
         if (evt.isRetained()) {
             final String topic = evt.getTopic();
@@ -780,7 +776,7 @@ public class ProtocolProcessor {
     
     private boolean subscribeSingleTopic(final Subscription newSubscription) {
         subscriptions.add(newSubscription.asClientTopicCouple());
-        consumerGroup.subscribe(newSubscription, 3);
+        consumerGroup.subscribe(newSubscription, 1);
 
         //scans retained messages to be published to the new subscription
         //TODO this is ugly, it does a linear scan on potential big dataset
@@ -795,12 +791,8 @@ public class ProtocolProcessor {
         for (IMessagesStore.StoredMessage storedMsg : messages) {
             //fire the as retained the message
             LOG.debug("send publish message for topic {}", newSubscription.getTopicFilter());
-            
-            KeyedMessage<byte[], byte[]> message = new KeyedMessage<byte[], byte[]>(
-            		storedMsg.getTopic().replaceAll("/", "_bs_"),
-					(storedMsg.getMessageID() == null ? storedMsg.getClientID() : storedMsg.getClientID() + "-" + storedMsg.getMessageID()).getBytes(), 
-					storedMsg.getPayload().array());
-			producer.send(message);
+
+			producer.send(getBytes(storedMsg));
         }
 
         //notify the Observables
@@ -822,4 +814,8 @@ public class ProtocolProcessor {
         }
         channel.flush();
     }
+
+	public void shutdown() {
+		consumerGroup.shutdown();
+	}
 }

@@ -15,6 +15,7 @@
  */
 package io.moquette.server;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 
 import java.io.File;
@@ -87,6 +88,7 @@ public class ServerIntegrationSSLTest {
     public void setUp() throws Exception {
         String dbPath = IntegrationUtils.localMapDBPath();
         File dbFile = new File(dbPath);
+        dbFile.delete();
         assertFalse(String.format("The DB storagefile %s already exists", dbPath), dbFile.exists());
 
         startServer();
