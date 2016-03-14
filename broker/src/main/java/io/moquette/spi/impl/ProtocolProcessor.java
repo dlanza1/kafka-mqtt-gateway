@@ -308,13 +308,13 @@ public class ProtocolProcessor {
 
         LOG.info("republishing stored messages to client <{}>", clientSession.clientID);
         for (IMessagesStore.StoredMessage pubEvt : publishedEvents) {
-			producer.send(getBytes(pubEvt));
+			producer.send(toKeyedMessage(pubEvt));
             
             clientSession.removeEnqueued(pubEvt.getGuid());
         }
     }
     
-    private KeyedMessage<byte[], byte[]> getBytes(StoredMessage pubEvt) {
+    private KeyedMessage<byte[], byte[]> toKeyedMessage(StoredMessage pubEvt) {
     	ByteArrayOutputStream bos = new ByteArrayOutputStream();
     	ObjectOutput out = null;
     	byte[] payload = null;
@@ -389,9 +389,9 @@ public class ProtocolProcessor {
         IMessagesStore.StoredMessage toStoreMsg = asStoredMessage(msg);
         toStoreMsg.setClientID(clientID);
         if (qos == AbstractMessage.QOSType.MOST_ONE) { //QoS0
-			producer.send(getBytes(toStoreMsg));
+			producer.send(toKeyedMessage(toStoreMsg));
         } else if (qos == AbstractMessage.QOSType.LEAST_ONE) { //QoS1
-        	producer.send(getBytes(toStoreMsg));
+        	producer.send(toKeyedMessage(toStoreMsg));
             sendPubAck(clientID, messageID);
             LOG.debug("replying with PubAck to MSG ID {}", messageID);
         } else if (qos == AbstractMessage.QOSType.EXACTLY_ONCE) { //QoS2
@@ -440,7 +440,7 @@ public class ProtocolProcessor {
         if (qos == AbstractMessage.QOSType.EXACTLY_ONCE) { //QoS2
             guid = m_messagesStore.storePublishForFuture(toStoreMsg);
         }
-		producer.send(getBytes(toStoreMsg));
+		producer.send(toKeyedMessage(toStoreMsg));
 
         if (!msg.isRetainFlag()) {
             return;
@@ -471,7 +471,7 @@ public class ProtocolProcessor {
         IMessagesStore.StoredMessage tobeStored = asStoredMessage(will);
         tobeStored.setClientID(clientID);
         tobeStored.setMessageID(messageId);
-        producer.send(getBytes(tobeStored));
+        producer.send(toKeyedMessage(tobeStored));
     }
 
 
@@ -611,7 +611,7 @@ public class ProtocolProcessor {
         verifyToActivate(clientID, targetSession);
         IMessagesStore.StoredMessage evt = targetSession.storedMessage(messageID);
         
-        producer.send(getBytes(evt));
+        producer.send(toKeyedMessage(evt));
 
         if (evt.isRetained()) {
             final String topic = evt.getTopic();
@@ -792,7 +792,7 @@ public class ProtocolProcessor {
             //fire the as retained the message
             LOG.debug("send publish message for topic {}", newSubscription.getTopicFilter());
 
-			producer.send(getBytes(storedMsg));
+			producer.send(toKeyedMessage(storedMsg));
         }
 
         //notify the Observables

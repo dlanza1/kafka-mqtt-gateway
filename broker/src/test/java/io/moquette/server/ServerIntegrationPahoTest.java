@@ -290,7 +290,7 @@ public class ServerIntegrationPahoTest {
         m_client.disconnect();
 
         //reconnect and publish
-        MqttMessage message = m_messagesCollector.getMessage(3);
+        MqttMessage message = m_messagesCollector.getMessage(100);
         assertNotNull(message);
         assertEquals("Hello MQTT", message.toString());
         assertEquals(1, message.getQos());
