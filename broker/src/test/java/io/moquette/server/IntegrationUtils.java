@@ -38,6 +38,7 @@ public class IntegrationUtils {
     public static Properties prepareTestPropeties() {
         Properties testProperties = new Properties();
         testProperties.put(PERSISTENT_STORE_PROPERTY_NAME, IntegrationUtils.localMapDBPath());
+        testProperties.put("kafka_properties_file", "src/test/resources/kafka.properties");
         return testProperties;
     }
 

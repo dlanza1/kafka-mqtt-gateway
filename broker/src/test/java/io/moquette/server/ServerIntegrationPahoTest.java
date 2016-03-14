@@ -15,22 +15,35 @@
  */
 package io.moquette.server;
 
-import io.moquette.server.config.IConfig;
-import io.moquette.server.config.MemoryConfig;
-import org.eclipse.paho.client.mqttv3.*;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+
+import java.io.File;
+import java.io.IOException;
+import java.util.Properties;
+
+import org.eclipse.paho.client.mqttv3.IMqttClient;
+import org.eclipse.paho.client.mqttv3.MqttClient;
+import org.eclipse.paho.client.mqttv3.MqttClientPersistence;
+import org.eclipse.paho.client.mqttv3.MqttConnectOptions;
+import org.eclipse.paho.client.mqttv3.MqttException;
+import org.eclipse.paho.client.mqttv3.MqttMessage;
 import org.eclipse.paho.client.mqttv3.persist.MqttDefaultFilePersistence;
 import org.junit.After;
+import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.File;
-import java.io.IOException;
-import java.util.Properties;
-
-import static org.junit.Assert.*;
+import io.moquette.server.config.IConfig;
+import io.moquette.server.config.MemoryConfig;
+import io.moquette.server.kafka.KafkaService;
 
 public class ServerIntegrationPahoTest {
 
@@ -45,11 +58,20 @@ public class ServerIntegrationPahoTest {
     MessageCollector m_messagesCollector;
     IConfig m_config;
 
+    static KafkaService kafka;
+    
     @BeforeClass
-    public static void beforeTests() {
+    public static void beforeTests() throws Exception {
         String tmpDir = System.getProperty("java.io.tmpdir");
         s_dataStore = new MqttDefaultFilePersistence(tmpDir);
         s_pubDataStore = new MqttDefaultFilePersistence(tmpDir + File.separator + "publisher");
+        
+        kafka = new KafkaService().start();
+    }
+
+    @AfterClass
+    public static void afterTests() throws Exception {
+    	kafka.shutdown();
     }
 
     protected void startServer() throws IOException {
@@ -199,7 +221,11 @@ public class ServerIntegrationPahoTest {
         m_client.connect(options);
         m_client.publish("/topic", "Test my payload".getBytes(), 0, false);
 
-        assertEquals("/topic", m_messagesCollector.getTopic());
+        try{
+        	assertEquals("/topic", m_messagesCollector.getTopic());
+        }catch(NullPointerException e){
+        	fail();
+        }
     }
 
     @Test
@@ -264,7 +290,8 @@ public class ServerIntegrationPahoTest {
         m_client.disconnect();
 
         //reconnect and publish
-        MqttMessage message = m_messagesCollector.getMessage(true);
+        MqttMessage message = m_messagesCollector.getMessage(3);
+        assertNotNull(message);
         assertEquals("Hello MQTT", message.toString());
         assertEquals(1, message.getQos());
     }
@@ -422,6 +449,7 @@ public class ServerIntegrationPahoTest {
         subscriberA.disconnect();
 
         MqttMessage messageOnB = cbSubscriberB.getMessage(true);
+        assertNotNull(messageOnB);
         assertEquals("Hello world MQTT!!", new String(messageOnB.getPayload()));
         assertEquals(2, messageOnB.getQos());
         subscriberB.disconnect();

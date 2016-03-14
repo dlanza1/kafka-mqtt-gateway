@@ -15,7 +15,6 @@
  */
 package io.moquette.server;
 
-import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 
 import java.io.File;
@@ -35,7 +34,6 @@ import javax.net.ssl.SSLSocketFactory;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.TrustManagerFactory;
 
-import io.moquette.BrokerConstants;
 import org.eclipse.paho.client.mqttv3.IMqttClient;
 import org.eclipse.paho.client.mqttv3.MqttClient;
 import org.eclipse.paho.client.mqttv3.MqttClientPersistence;
@@ -44,11 +42,15 @@ import org.eclipse.paho.client.mqttv3.MqttMessage;
 import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence;
 import org.eclipse.paho.client.mqttv3.persist.MqttDefaultFilePersistence;
 import org.junit.After;
+import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import io.moquette.BrokerConstants;
+import io.moquette.server.kafka.KafkaService;
 
 /**
  * Check that Moquette could also handle SSL.
@@ -63,19 +65,29 @@ public class ServerIntegrationSSLTest {
 
     IMqttClient m_client;
     MessageCollector m_callback;
+    
+    static KafkaService kafka;
 
     @BeforeClass
-    public static void beforeTests() {
+    public static void beforeTests() throws Exception {
         String tmpDir = System.getProperty("java.io.tmpdir");
         s_dataStore = new MqttDefaultFilePersistence(tmpDir);
+        
+        kafka = new KafkaService().start();
     }
 
+    @AfterClass
+    public static void afterTests() throws Exception {
+    	kafka.shutdown();
+    }
+    
     protected void startServer() throws IOException {
         String file = getClass().getResource("/").getPath();
         System.setProperty("moquette.path", file);
         m_server = new Server();
 
         Properties sslProps = new Properties();
+        sslProps.put("kafka_properties_file", "src/test/resources/kafka.properties");
         sslProps.put(BrokerConstants.SSL_PORT_PROPERTY_NAME, "8883");
         sslProps.put(BrokerConstants.JKS_PATH_PROPERTY_NAME, "serverkeystore.jks");
         sslProps.put(BrokerConstants.KEY_STORE_PASSWORD_PROPERTY_NAME, "passw0rdsrv");

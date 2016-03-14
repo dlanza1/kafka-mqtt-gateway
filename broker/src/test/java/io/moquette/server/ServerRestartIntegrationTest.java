@@ -17,9 +17,12 @@ package io.moquette.server;
 
 import io.moquette.server.config.IConfig;
 import io.moquette.server.config.MemoryConfig;
+import io.moquette.server.kafka.KafkaService;
+
 import org.eclipse.paho.client.mqttv3.*;
 import org.eclipse.paho.client.mqttv3.persist.MqttDefaultFilePersistence;
 import org.junit.After;
+import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -39,6 +42,7 @@ public class ServerRestartIntegrationTest {
     static MqttClientPersistence s_dataStore;
     static MqttClientPersistence s_pubDataStore;
     static MqttConnectOptions CLEAN_SESSION_OPT = new MqttConnectOptions();
+	private static KafkaService kafka;
 
     Server m_server;
     IMqttClient m_subscriber;
@@ -54,11 +58,18 @@ public class ServerRestartIntegrationTest {
     }
 
     @BeforeClass
-    public static void beforeTests() {
+    public static void beforeTests() throws Exception {
         String tmpDir = System.getProperty("java.io.tmpdir");
         s_dataStore = new MqttDefaultFilePersistence(tmpDir);
         s_pubDataStore = new MqttDefaultFilePersistence(tmpDir + File.separator + "publisher");
         CLEAN_SESSION_OPT.setCleanSession(false);
+    
+        kafka = new KafkaService().start();
+    }
+
+    @AfterClass
+    public static void afterTests() throws Exception {
+    	kafka.shutdown();
     }
 
     @Before

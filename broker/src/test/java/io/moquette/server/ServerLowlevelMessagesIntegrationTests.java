@@ -21,13 +21,17 @@ import io.moquette.parser.proto.messages.AbstractMessage.QOSType;
 import io.moquette.parser.proto.messages.ConnAckMessage;
 import io.moquette.server.config.IConfig;
 import io.moquette.server.config.MemoryConfig;
+import io.moquette.server.kafka.KafkaService;
 import io.moquette.testclient.Client;
 import org.eclipse.paho.client.mqttv3.IMqttClient;
 import org.eclipse.paho.client.mqttv3.MqttClient;
 import org.eclipse.paho.client.mqttv3.MqttClientPersistence;
 import org.eclipse.paho.client.mqttv3.MqttMessage;
+import org.eclipse.paho.client.mqttv3.persist.MqttDefaultFilePersistence;
 import org.junit.After;
+import org.junit.AfterClass;
 import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -46,6 +50,7 @@ import static org.junit.Assert.*;
 public class ServerLowlevelMessagesIntegrationTests {
     private static final Logger LOG = LoggerFactory.getLogger(ServerLowlevelMessagesIntegrationTests.class);
     static MqttClientPersistence s_dataStore;
+	private static KafkaService kafka;
     Server m_server;
     Client m_client;
     IMqttClient m_willSubscriber;
@@ -57,6 +62,16 @@ public class ServerLowlevelMessagesIntegrationTests {
         final Properties configProps = IntegrationUtils.prepareTestPropeties();
         m_config = new MemoryConfig(configProps);
         m_server.startServer(m_config);
+    }
+    
+    @BeforeClass
+    public static void beforeTests() throws Exception {
+        kafka = new KafkaService().start();
+    }
+
+    @AfterClass
+    public static void afterTests() throws Exception {
+    	kafka.shutdown();
     }
 
     @Before

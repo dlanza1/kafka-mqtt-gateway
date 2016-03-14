@@ -15,30 +15,39 @@
  */
 package io.moquette.server;
 
-import io.moquette.parser.proto.messages.AbstractMessage.QOSType;
-import io.moquette.parser.proto.messages.PublishMessage;
-import io.moquette.server.config.IConfig;
-import io.moquette.server.config.MemoryConfig;
-import org.eclipse.paho.client.mqttv3.*;
-import org.eclipse.paho.client.mqttv3.persist.MqttDefaultFilePersistence;
-import org.junit.After;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.Test;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
 
 import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Properties;
 
-import static org.junit.Assert.*;
+import org.eclipse.paho.client.mqttv3.IMqttClient;
+import org.eclipse.paho.client.mqttv3.MqttClient;
+import org.eclipse.paho.client.mqttv3.MqttClientPersistence;
+import org.eclipse.paho.client.mqttv3.MqttMessage;
+import org.eclipse.paho.client.mqttv3.persist.MqttDefaultFilePersistence;
+import org.junit.After;
+import org.junit.AfterClass;
+import org.junit.Before;
+import org.junit.BeforeClass;
+import org.junit.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import io.moquette.parser.proto.messages.AbstractMessage.QOSType;
+import io.moquette.parser.proto.messages.PublishMessage;
+import io.moquette.server.config.IConfig;
+import io.moquette.server.config.MemoryConfig;
+import io.moquette.server.kafka.KafkaService;
 
 public class ServerIntegrationEmbeddedPublishTest {
 
-    private static final Logger LOG = LoggerFactory.getLogger(ServerIntegrationEmbeddedPublishTest.class);
-
+	private static final Logger LOG = LoggerFactory.getLogger(ServerIntegrationEmbeddedPublishTest.class);
+	
     static MqttClientPersistence s_dataStore;
     static MqttClientPersistence s_pubDataStore;
 
@@ -46,6 +55,8 @@ public class ServerIntegrationEmbeddedPublishTest {
     IMqttClient m_subscriber;
     MessageCollector m_callback;
     IConfig m_config;
+    
+    static KafkaService kafka;
 
     protected void startServer() throws IOException {
         m_server = new Server();
@@ -55,12 +66,19 @@ public class ServerIntegrationEmbeddedPublishTest {
     }
 
     @BeforeClass
-    public static void beforeTests() {
+    public static void beforeTests() throws Exception {
         String tmpDir = System.getProperty("java.io.tmpdir");
         s_dataStore = new MqttDefaultFilePersistence(tmpDir);
         s_pubDataStore = new MqttDefaultFilePersistence(tmpDir + File.separator + "publisher");
+        
+        kafka = new KafkaService().start();
     }
 
+    @AfterClass
+    public static void afterTests() throws Exception {
+    	kafka.shutdown();
+    }
+    
     @Before
     public void setUp() throws Exception {
         String dbPath = IntegrationUtils.localMapDBPath();
@@ -103,8 +121,8 @@ public class ServerIntegrationEmbeddedPublishTest {
     }
 
     private void verifyMessageIsReceivedSuccessfully() throws Exception {
-        //check in 2 seconds
-        MqttMessage msg = m_callback.getMessage(2);
+        //check in 4 seconds
+        MqttMessage msg = m_callback.getMessage(8);
         assertNotNull(msg);
         assertEquals("Hello world MQTT!!", new String(msg.getPayload()));
     }

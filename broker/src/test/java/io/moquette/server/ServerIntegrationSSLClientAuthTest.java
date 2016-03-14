@@ -35,6 +35,8 @@ import javax.net.ssl.TrustManager;
 import javax.net.ssl.TrustManagerFactory;
 
 import io.moquette.BrokerConstants;
+import io.moquette.server.kafka.KafkaService;
+
 import org.eclipse.paho.client.mqttv3.IMqttClient;
 import org.eclipse.paho.client.mqttv3.MqttClient;
 import org.eclipse.paho.client.mqttv3.MqttClientPersistence;
@@ -42,6 +44,7 @@ import org.eclipse.paho.client.mqttv3.MqttConnectOptions;
 import org.eclipse.paho.client.mqttv3.MqttException;
 import org.eclipse.paho.client.mqttv3.persist.MqttDefaultFilePersistence;
 import org.junit.After;
+import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -95,13 +98,22 @@ public class ServerIntegrationSSLClientAuthTest {
     Server m_server;
     static MqttClientPersistence s_dataStore;
 
+	private static KafkaService kafka;
+
     IMqttClient m_client;
     MessageCollector m_callback;
 
     @BeforeClass
-    public static void beforeTests() {
+    public static void beforeTests() throws Exception {
         String tmpDir = System.getProperty("java.io.tmpdir");
         s_dataStore = new MqttDefaultFilePersistence(tmpDir);
+    
+        kafka = new KafkaService().start();
+    }
+
+    @AfterClass
+    public static void afterTests() throws Exception {
+    	kafka.shutdown();
     }
 
     protected void startServer() throws IOException {
@@ -110,6 +122,7 @@ public class ServerIntegrationSSLClientAuthTest {
         m_server = new Server();
 
         Properties sslProps = new Properties();
+        sslProps.put("kafka_properties_file", "config/kafka.properties");
         sslProps.put(BrokerConstants.SSL_PORT_PROPERTY_NAME, "8883");
         sslProps.put(BrokerConstants.JKS_PATH_PROPERTY_NAME, "signedserverkeystore.jks");
         sslProps.put(BrokerConstants.KEY_STORE_PASSWORD_PROPERTY_NAME, "passw0rdsrv");

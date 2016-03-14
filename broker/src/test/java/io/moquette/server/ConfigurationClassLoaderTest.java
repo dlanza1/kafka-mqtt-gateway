@@ -15,26 +15,31 @@
  */
 package io.moquette.server;
 
-import io.moquette.BrokerConstants;
-import io.moquette.server.config.IConfig;
-import io.moquette.server.config.MemoryConfig;
-import io.moquette.spi.security.IAuthenticator;
-import io.moquette.spi.security.IAuthorizator;
-import org.junit.After;
-import org.junit.Test;
+import static org.junit.Assert.assertTrue;
 
 import java.io.File;
 import java.io.IOException;
 import java.util.Properties;
 
-import static org.junit.Assert.*;
+import org.junit.After;
+import org.junit.AfterClass;
+import org.junit.BeforeClass;
+import org.junit.Test;
+
+import io.moquette.BrokerConstants;
+import io.moquette.server.config.IConfig;
+import io.moquette.server.config.MemoryConfig;
+import io.moquette.server.kafka.KafkaService;
+import io.moquette.spi.security.IAuthenticator;
+import io.moquette.spi.security.IAuthorizator;
 
 /**
  *
  * @author luca <luca.capra@create-net.org> 
  */
 public class ConfigurationClassLoaderTest implements IAuthenticator, IAuthorizator {
-    Server m_server;
+    private static KafkaService kafka;
+	Server m_server;
     IConfig m_config;
     
     protected void startServer(Properties props) throws IOException {
@@ -42,7 +47,16 @@ public class ConfigurationClassLoaderTest implements IAuthenticator, IAuthorizat
         m_config = new MemoryConfig(props);
         m_server.startServer(m_config);
     }
+    
+    @BeforeClass
+    public static void beforeTests() throws Exception {
+        kafka = new KafkaService().start();
+    }
 
+    @AfterClass
+    public static void afterTests() throws Exception {
+    	kafka.shutdown();
+    }
 
     @After
     public void tearDown() throws Exception {

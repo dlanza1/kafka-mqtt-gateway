@@ -15,23 +15,6 @@
  */
 package io.moquette.spi.impl;
 
-import io.moquette.parser.proto.messages.AbstractMessage;
-import io.moquette.parser.proto.messages.ConnectMessage;
-import io.moquette.parser.proto.messages.SubscribeMessage;
-import io.moquette.server.netty.NettyUtils;
-import io.moquette.spi.ClientSession;
-import io.moquette.spi.IMessagesStore;
-import io.moquette.spi.ISessionsStore;
-import io.moquette.spi.impl.subscriptions.SubscriptionsStore;
-import io.moquette.spi.impl.security.PermitAllAuthorizator;
-import io.moquette.spi.impl.subscriptions.Subscription;
-import io.netty.channel.embedded.EmbeddedChannel;
-import org.junit.Before;
-import org.junit.Test;
-
-import java.util.HashMap;
-import java.util.Map;
-
 import static io.moquette.parser.netty.Utils.VERSION_3_1_1;
 import static io.moquette.parser.proto.messages.ConnAckMessage.BAD_USERNAME_OR_PASSWORD;
 import static io.moquette.parser.proto.messages.ConnAckMessage.CONNECTION_ACCEPTED;
@@ -41,13 +24,37 @@ import static io.moquette.spi.impl.NettyChannelAssertions.assertEqualsSubAck;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Properties;
+
+import org.junit.AfterClass;
+import org.junit.Before;
+import org.junit.BeforeClass;
+import org.junit.Test;
+
+import io.moquette.parser.proto.messages.AbstractMessage;
+import io.moquette.parser.proto.messages.ConnectMessage;
+import io.moquette.parser.proto.messages.SubscribeMessage;
+import io.moquette.server.kafka.KafkaService;
+import io.moquette.server.netty.NettyUtils;
+import io.moquette.spi.ClientSession;
+import io.moquette.spi.IMessagesStore;
+import io.moquette.spi.ISessionsStore;
+import io.moquette.spi.impl.kafka.ConsumerGroup;
+import io.moquette.spi.impl.security.PermitAllAuthorizator;
+import io.moquette.spi.impl.subscriptions.Subscription;
+import io.moquette.spi.impl.subscriptions.SubscriptionsStore;
+import io.netty.channel.embedded.EmbeddedChannel;
+
 /**
  *
  * @author andrea
  */
 public class ProtocolProcessor_CONNECT_Test {
 
-    EmbeddedChannel m_session;
+    private static KafkaService kafka;
+	EmbeddedChannel m_session;
     ConnectMessage connMsg;
     ProtocolProcessor m_processor;
 
@@ -55,6 +62,16 @@ public class ProtocolProcessor_CONNECT_Test {
     ISessionsStore m_sessionStore;
     SubscriptionsStore subscriptions;
     MockAuthenticator m_mockAuthenticator;
+    
+    @BeforeClass
+    public static void beforeTests() throws Exception {
+        kafka = new KafkaService().start();
+    }
+
+    @AfterClass
+    public static void afterTests() throws Exception {
+    	kafka.shutdown();
+    }
 
     @Before
     public void setUp() throws InterruptedException {
@@ -78,8 +95,13 @@ public class ProtocolProcessor_CONNECT_Test {
         subscriptions = new SubscriptionsStore();
         subscriptions.init(m_sessionStore);
         m_processor = new ProtocolProcessor();
-        m_processor.init(subscriptions, m_messagesStore, m_sessionStore, m_mockAuthenticator, true,
-                new PermitAllAuthorizator(), ProtocolProcessorTest.NO_OBSERVERS_INTERCEPTOR, null, null);
+        Properties props = new Properties();
+        props.put("zookeeper.connect", "localhost:2181");
+        props.put("group.id", "any");
+		m_processor.init(subscriptions, m_messagesStore, m_sessionStore, m_mockAuthenticator, true,
+                new PermitAllAuthorizator(), ProtocolProcessorTest.NO_OBSERVERS_INTERCEPTOR, 
+                null, 
+                new ConsumerGroup(props , m_processor));
     }
 
     @Test
