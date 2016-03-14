@@ -33,6 +33,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.text.ParseException;
@@ -146,34 +148,31 @@ public class SimpleMessaging {
             }
 
         }
-
-    	Properties props_kafka = new Properties();
-    	props_kafka.put("metadata.broker.list", "nodo1:9092,nodo2:9092 ");
-//      props_kafka.put("serializer.class", "kafka.serializer.DefaultEncoder");
-//      props_kafka.put("partitioner.class", "org.apache.kafka.clients.producer.internals.DefaultPartitioner");
-        /**
-        0, which means that the producer never waits for an acknowledgement 
-        	from the broker (the same behavior as 0.7). This option provides 
-        	the lowest latency but the weakest durability guarantees (some 
-        	data will be lost when a server fails).
-        1, which means that the producer gets an acknowledgement after the 
-        	leader replica has received the data. This option provides better 
-        	durability as the client waits until the server acknowledges the 
-        	request as successful (only messages that were written to the 
-        	now-dead leader but not yet replicated will be lost).
-        -1, which means that the producer gets an acknowledgement after all 
-        	in-sync replicas have received the data. This option provides the 
-        	best durability, we guarantee that no messages will be lost as 
-        	long as at least one in sync replica remains.
- 		**/
-    	props_kafka.put("request.required.acks", "1");
-        ProducerConfig config = new ProducerConfig(props_kafka);
-        Producer<byte[], byte[]> producer = new Producer<byte[], byte[]>(config);
         
-        String zooKeeper = "nodo1:2181,nodo4:2181,nodo6:2181";
-		String groupId = "any";
-        ConsumerGroup consumerGroup = new ConsumerGroup(zooKeeper, groupId, m_processor);
+        Properties props_kafka = new Properties();
+        FileInputStream fileInput = null;
+		try {
+			File kafka_properties_file = new File(props.getProperty("kafka_properties_file"));
+			
+			LOG.info("Loading Kafka properties from: " + kafka_properties_file.getAbsolutePath());
+			
+			fileInput = new FileInputStream(kafka_properties_file);
+			props_kafka.load(fileInput);
+		} catch (IOException e) {
+			throw new RuntimeException("Kafka properties file could not be read", e);
+		}finally {
+			try {
+				if(fileInput != null) fileInput.close();
+			} catch (IOException e) {}
+		}
+		
+		//Overwrite properties
+		props_kafka.put("serializer.class", "kafka.serializer.DefaultEncoder");
+		
+        Producer<byte[], byte[]> producer = new Producer<byte[], byte[]>(new ProducerConfig(props_kafka));
         
+        ConsumerGroup consumerGroup = new ConsumerGroup(props_kafka, m_processor);
+		
         boolean allowAnonymous = Boolean.parseBoolean(props.getProperty(BrokerConstants.ALLOW_ANONYMOUS_PROPERTY_NAME, "true"));
         m_processor.init(subscriptions, 
         		messagesStore, 

@@ -20,19 +20,11 @@ public class ConsumerGroup {
 
 	private Properties props;
 
-	public ConsumerGroup(String a_zookeeper, String a_groupId, ProtocolProcessor protocolProcessor) {
-		props = new Properties();
-		props.put("zookeeper.connect", a_zookeeper);
-		props.put("group.id", a_groupId);
-		
-		//Defaults
-//		props.put("zookeeper.session.timeout.ms", "400");
-//		props.put("zookeeper.sync.time.ms", "200");
-//		props.put("auto.commit.interval.ms", "1000");
-		
+	public ConsumerGroup(Properties props, ProtocolProcessor protocolProcessor) {		
 		threadGroups = new HashMap<String, TopicCounsumerGroup>();
 		
 		this.protocolProcessor = protocolProcessor;
+		this.props = props;
 	}
 
 	public synchronized void shutdown() {
