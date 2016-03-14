@@ -568,6 +568,8 @@ public class ServerIntegrationPahoTest {
 
         m_publisher.publish("/topic", "Hello world MQTT!!-2".getBytes(), 1, false);
         m_publisher.publish("/topic", "Hello world MQTT!!-3".getBytes(), 1, false);
+        
+        Thread.sleep(500);
 
         //reconnect and expect to receive the hello 2 message
         m_client.connect(options);
