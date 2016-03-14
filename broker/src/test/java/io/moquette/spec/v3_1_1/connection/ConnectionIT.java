@@ -20,14 +20,16 @@ import static org.junit.Assert.assertTrue;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.Properties;
 
-import io.moquette.BrokerConstants;
-import io.moquette.server.Server;
-import io.moquette.testclient.RawClient;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Ignore;
 import org.junit.Test;
+
+import io.moquette.BrokerConstants;
+import io.moquette.server.Server;
+import io.moquette.testclient.RawClient;
 
 /**
  *
@@ -40,7 +42,10 @@ public class ConnectionIT {
 	
     protected void startServer() throws IOException {
         m_server = new Server();
-        m_server.startServer();
+        
+        Properties props = new Properties();
+        props.put("kafka_properties_file", "src/test/resources/kafka.properties");
+        m_server.startServer(props);
     }
 
     @Before

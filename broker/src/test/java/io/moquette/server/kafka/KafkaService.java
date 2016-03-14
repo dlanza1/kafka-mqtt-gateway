@@ -19,6 +19,9 @@ public class KafkaService {
 	private TestingServer zkTestServer;
 
 	public KafkaService() throws Exception {
+		deleteDir(new File("zookeeper-data"));
+    	deleteDir(new File("kafkalog"));
+    	
 		zkTestServer = new TestingServer(2181, new File("zookeeper-data"));
         KafkaConfig kafkaConfig = new KafkaConfig(createProperties("kafkalog", 9092, 1, "localhost:2181"), false);
         kafka = new KafkaServerStartable(kafkaConfig);

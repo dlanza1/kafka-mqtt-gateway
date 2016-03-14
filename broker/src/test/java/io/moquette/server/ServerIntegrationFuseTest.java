@@ -101,7 +101,7 @@ public class ServerIntegrationFuseTest {
         m_publisher.kill();
         
         //Verify, that the testament is fired
-        Message msg = m_subscriber.receive(500, TimeUnit.MILLISECONDS);
+        Message msg = m_subscriber.receive(5, TimeUnit.SECONDS);
         assertNotNull("We should get notified with 'Will' message", msg);
         msg.ack();
         assertEquals(willTestamentMsg, new String(msg.getPayload()));

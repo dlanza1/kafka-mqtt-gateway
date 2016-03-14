@@ -15,29 +15,57 @@
  */
 package io.moquette.spi.impl;
 
-import io.moquette.parser.proto.messages.*;
+import static io.moquette.spi.impl.NettyChannelAssertions.assertConnAckAccepted;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
+import static org.mockito.Matchers.anyString;
+import static org.mockito.Matchers.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+
+import java.nio.ByteBuffer;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Properties;
+
+import org.junit.After;
+import org.junit.AfterClass;
+import org.junit.Before;
+import org.junit.BeforeClass;
+import org.junit.Test;
+
 import io.moquette.interception.InterceptHandler;
+import io.moquette.parser.proto.messages.AbstractMessage;
 import io.moquette.parser.proto.messages.AbstractMessage.QOSType;
+import io.moquette.parser.proto.messages.ConnectMessage;
+import io.moquette.parser.proto.messages.PublishMessage;
+import io.moquette.parser.proto.messages.SubAckMessage;
+import io.moquette.parser.proto.messages.SubscribeMessage;
+import io.moquette.parser.proto.messages.UnsubscribeMessage;
 import io.moquette.server.ConnectionDescriptor;
+import io.moquette.server.kafka.KafkaService;
 import io.moquette.server.netty.NettyUtils;
 import io.moquette.spi.ClientSession;
 import io.moquette.spi.IMatchingCondition;
 import io.moquette.spi.IMessagesStore;
 import io.moquette.spi.IMessagesStore.StoredMessage;
 import io.moquette.spi.ISessionsStore;
+import io.moquette.spi.impl.kafka.ConsumerGroup;
 import io.moquette.spi.impl.security.PermitAllAuthorizator;
 import io.moquette.spi.impl.subscriptions.Subscription;
 import io.moquette.spi.impl.subscriptions.SubscriptionsStore;
 import io.moquette.spi.security.IAuthorizator;
 import io.netty.channel.embedded.EmbeddedChannel;
-import org.junit.Before;
-import org.junit.Test;
-
-import java.nio.ByteBuffer;
-import java.util.*;
-import static io.moquette.spi.impl.NettyChannelAssertions.assertConnAckAccepted;
-import static org.junit.Assert.*;
-import static org.mockito.Mockito.*;
+import kafka.javaapi.producer.Producer;
+import kafka.producer.ProducerConfig;
 
 /**
  *
@@ -57,6 +85,7 @@ public class ProtocolProcessorTest {
 
     final static List<InterceptHandler> EMPTY_OBSERVERS = Collections.emptyList();
     final static BrokerInterceptor NO_OBSERVERS_INTERCEPTOR = new BrokerInterceptor(EMPTY_OBSERVERS);
+	private static KafkaService kafka;
     
     EmbeddedChannel m_channel;
     ConnectMessage connMsg;
@@ -66,6 +95,19 @@ public class ProtocolProcessorTest {
     ISessionsStore m_sessionStore;
     SubscriptionsStore subscriptions;
     MockAuthenticator m_mockAuthenticator;
+	private Producer<byte[], byte[]> producer;
+	private ConsumerGroup consumer;
+	private Properties props_kafka;
+    
+    @BeforeClass
+    public static void beforeTests() throws Exception {
+        kafka = new KafkaService().start();
+    }
+
+    @AfterClass
+    public static void afterTests() throws Exception {
+    	kafka.shutdown();
+    }
     
     @Before
     public void setUp() throws InterruptedException {
@@ -88,13 +130,31 @@ public class ProtocolProcessorTest {
         users.put(TEST_USER, TEST_PWD);
         m_mockAuthenticator = new MockAuthenticator(users);
 
+        props_kafka = new Properties();
+        props_kafka.put("zookeeper.connect", "localhost:2181");
+        props_kafka.put("metadata.broker.list", "localhost:9092");
+        props_kafka.put("group.id", "any");
+        producer = new Producer<byte[], byte[]>(new ProducerConfig(props_kafka));
+        consumer = new ConsumerGroup(props_kafka , m_processor);
+        
         subscriptions = new SubscriptionsStore();
         subscriptions.init(memStorage.sessionsStore());
         m_processor = new ProtocolProcessor();
-        m_processor.init(subscriptions, m_messagesStore, m_sessionStore, m_mockAuthenticator, true,
-                new PermitAllAuthorizator(), NO_OBSERVERS_INTERCEPTOR, null, null);
+        
+		m_processor.init(subscriptions, m_messagesStore, m_sessionStore, m_mockAuthenticator, true,
+                new PermitAllAuthorizator(), NO_OBSERVERS_INTERCEPTOR, 
+                producer, 
+                consumer);
     }
 
+    @After
+    public void afterTest(){
+    	producer.close();
+    	consumer.shutdown();
+    	
+    	producer = new Producer<byte[], byte[]>(new ProducerConfig(props_kafka));
+        consumer = new ConsumerGroup(props_kafka , m_processor);
+    }
 
     @Test
     public void testPublishToItself() throws InterruptedException {
@@ -117,7 +177,7 @@ public class ProtocolProcessorTest {
         MemoryStorageService storageService = new MemoryStorageService();
         storageService.initStore();
         subs.init(storageService.sessionsStore());
-        m_processor.init(subs, m_messagesStore, m_sessionStore, null, true, new PermitAllAuthorizator(), NO_OBSERVERS_INTERCEPTOR, null, null);
+        m_processor.init(subs, m_messagesStore, m_sessionStore, null, true, new PermitAllAuthorizator(), NO_OBSERVERS_INTERCEPTOR, producer, consumer);
         ConnectMessage connectMessage = new ConnectMessage();
         connectMessage.setProtocolVersion((byte) 3);
         connectMessage.setClientID(FAKE_CLIENT_ID);
@@ -164,7 +224,7 @@ public class ProtocolProcessorTest {
         MemoryStorageService storageService = new MemoryStorageService();
         storageService.initStore();
         subs.init(storageService.sessionsStore());
-        m_processor.init(subs, m_messagesStore, m_sessionStore, null, true, new PermitAllAuthorizator(), NO_OBSERVERS_INTERCEPTOR, null, null);
+        m_processor.init(subs, m_messagesStore, m_sessionStore, null, true, new PermitAllAuthorizator(), NO_OBSERVERS_INTERCEPTOR, producer, consumer);
 
         EmbeddedChannel firstReceiverChannel = new EmbeddedChannel();
         ConnectMessage connectMessage = new ConnectMessage();
@@ -232,7 +292,7 @@ public class ProtocolProcessorTest {
         IAuthorizator mockAuthorizator = mock(IAuthorizator.class);
         when(mockAuthorizator.canRead(eq(FAKE_TOPIC), eq(fakeUserName), eq(FAKE_CLIENT_ID))).thenReturn(false);
         m_processor.init(subscriptions, m_messagesStore, m_sessionStore, m_mockAuthenticator, true,
-                mockAuthorizator, NO_OBSERVERS_INTERCEPTOR, null, null);
+                mockAuthorizator, NO_OBSERVERS_INTERCEPTOR, producer, consumer);
 
         //Exercise
         SubscribeMessage msg = new SubscribeMessage();
@@ -325,7 +385,7 @@ public class ProtocolProcessorTest {
         subs.init(storageService.sessionsStore());
 
         //simulate a connect that register a clientID to an IoSession
-        m_processor.init(subs, m_messagesStore, m_sessionStore, null, true, new PermitAllAuthorizator(), NO_OBSERVERS_INTERCEPTOR, null, null);
+        m_processor.init(subs, m_messagesStore, m_sessionStore, null, true, new PermitAllAuthorizator(), NO_OBSERVERS_INTERCEPTOR, producer, consumer);
         ConnectMessage connectMessage = new ConnectMessage();
         connectMessage.setClientID(FAKE_PUBLISHER_ID);
         connectMessage.setProtocolVersion((byte) 3);
@@ -367,7 +427,7 @@ public class ProtocolProcessorTest {
         retainedMessage.setClientID(FAKE_PUBLISHER_ID);
         m_messagesStore.storePublishForFuture(retainedMessage);
 
-        m_processor.init(subs, m_messagesStore, m_sessionStore, null, true, new PermitAllAuthorizator(), NO_OBSERVERS_INTERCEPTOR, null, null);
+        m_processor.init(subs, m_messagesStore, m_sessionStore, null, true, new PermitAllAuthorizator(), NO_OBSERVERS_INTERCEPTOR, producer, consumer);
         ConnectMessage connectMessage = new ConnectMessage();
         connectMessage.setClientID(FAKE_PUBLISHER_ID);
         connectMessage.setProtocolVersion((byte) 3);
@@ -390,7 +450,7 @@ public class ProtocolProcessorTest {
         when(mockedSubscriptions.matches(eq("/topic"))).thenReturn(inactiveSubscriptions);
         m_processor = new ProtocolProcessor();
         m_processor.init(mockedSubscriptions, m_messagesStore, m_sessionStore, null, true, new PermitAllAuthorizator(),
-                NO_OBSERVERS_INTERCEPTOR, null, null);
+                NO_OBSERVERS_INTERCEPTOR, producer, consumer);
         
         //Exercise
         ByteBuffer buffer = ByteBuffer.allocate(5).put("Hello".getBytes());
@@ -479,7 +539,7 @@ public class ProtocolProcessorTest {
                 publishedForwarded.add(msgToStore);
             }
         };
-        processor.init(subscriptions, memoryMessageStore, sessionsStore, null, true, null, NO_OBSERVERS_INTERCEPTOR, null, null);
+        processor.init(subscriptions, memoryMessageStore, sessionsStore, null, true, null, NO_OBSERVERS_INTERCEPTOR, producer, consumer);
         //just to activate the two sessions
         processor.m_clientIDs.put("Sub A", new ConnectionDescriptor("Sub A", null, true));
         processor.m_clientIDs.put("Sub B", new ConnectionDescriptor("Sub B", null, true));

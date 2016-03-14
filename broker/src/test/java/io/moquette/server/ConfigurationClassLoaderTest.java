@@ -70,6 +70,7 @@ public class ConfigurationClassLoaderTest implements IAuthenticator, IAuthorizat
     @Test
     public void loadAuthenticator() throws Exception {
         Properties props = new Properties(IntegrationUtils.prepareTestPropeties());
+        props.setProperty("kafka_properties_file", "config/kafka.properties");
         props.setProperty(BrokerConstants.AUTHENTICATOR_CLASS_NAME, "io.moquette.server.ConfigurationClassLoaderTest");
         startServer(props);
         assertTrue(true);
@@ -79,6 +80,7 @@ public class ConfigurationClassLoaderTest implements IAuthenticator, IAuthorizat
     @Test
     public void loadAuthorizator() throws Exception {
         Properties props = new Properties(IntegrationUtils.prepareTestPropeties());
+        props.setProperty("kafka_properties_file", "config/kafka.properties");
         props.setProperty(BrokerConstants.AUTHORIZATOR_CLASS_NAME, "io.moquette.server.ConfigurationClassLoaderTest");
         startServer(props);
         assertTrue(true);
