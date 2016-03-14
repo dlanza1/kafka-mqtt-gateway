@@ -155,7 +155,7 @@ public class ServerIntegrationPahoTest {
         anotherClient.setCallback(m_messagesCollector);
         anotherClient.connect(options);
         anotherClient.publish("/topic", "Test my payload".getBytes(), 0, false);
-
+        
         assertEquals("/topic", m_messagesCollector.getTopic());
     }
 
@@ -172,7 +172,7 @@ public class ServerIntegrationPahoTest {
         //reconnect and publish
         m_client.connect(options);
         m_client.publish("/topic", "Test my payload".getBytes(), 0, false);
-
+        
         assertEquals("/topic", m_messagesCollector.getTopic());
     }
 
@@ -189,7 +189,7 @@ public class ServerIntegrationPahoTest {
         m_client.connect(options);
         m_client.subscribe("/topic", 0);
         m_client.disconnect();
-
+        
         //reconnect and publish
         //options.setCleanSession(false);
         m_client = new MqttClient("tcp://localhost:1883", "TestClient", s_dataStore);
@@ -197,6 +197,7 @@ public class ServerIntegrationPahoTest {
         m_client.setCallback(subListener);
         m_client.connect(options);
         m_client.publish("/topic", "Test my payload".getBytes(), 0, false);
+        
         //Ugly, we need to get self notified after the publish
         assertEquals("Test my payload", new String(subListener.getMessage(1).getPayload()));
 
@@ -249,6 +250,7 @@ public class ServerIntegrationPahoTest {
         options.setCleanSession(false);
         m_client.connect(options);
         m_client.subscribe("/topic", 0);
+        
         m_client.publish("/topic", "Test my payload".getBytes(), 0, false);
         //m_client.disconnect();
         assertEquals("/topic", m_messagesCollector.getTopic());
@@ -267,6 +269,7 @@ public class ServerIntegrationPahoTest {
         options.setCleanSession(false);
         m_client.connect(options);
         m_client.subscribe("/topic", 0);
+        
         m_client.publish("/topic", "Test my payload".getBytes(), 0, false);
         //m_client.disconnect();
         assertEquals("/topic", m_messagesCollector.getTopic());
@@ -285,12 +288,15 @@ public class ServerIntegrationPahoTest {
     public void testPublishWithQoS1() throws Exception {
         LOG.info("*** testPublishWithQoS1 ***");
         m_client.connect();
-        m_client.subscribe("/topic", 1);
+        m_client.subscribe("/topic", 1);        
         m_client.publish("/topic", "Hello MQTT".getBytes(), 1, false);
+        
+        Thread.sleep(1000);
+        
         m_client.disconnect();
 
         //reconnect and publish
-        MqttMessage message = m_messagesCollector.getMessage(100);
+        MqttMessage message = m_messagesCollector.getMessage(2);
         assertNotNull(message);
         assertEquals("Hello MQTT", message.toString());
         assertEquals(1, message.getQos());
@@ -513,6 +519,8 @@ public class ServerIntegrationPahoTest {
 
         MqttClient clientYB = createClient("publisher", "Y");
         clientYB.publish("topic", "Hello 2".getBytes(), 2, true);
+        
+        Thread.sleep(500);
 
         //Verify that the second subscriber client get notified and not the first.
         assertTrue(cbSubscriber1.connectionLost());
@@ -657,7 +665,6 @@ public class ServerIntegrationPahoTest {
         msg = messagesCollector.getMessage(1);
         assertNull(msg);
     }
-
 
     protected MqttClient createClient(String clientName, String storeSuffix) throws MqttException {
         return createClient(clientName, storeSuffix, null);

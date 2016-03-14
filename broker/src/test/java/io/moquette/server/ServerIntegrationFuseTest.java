@@ -120,6 +120,8 @@ public class ServerIntegrationFuseTest {
         
         //Exercise, kill the publisher connection
         m_publisher.kill();
+        
+        Thread.sleep(500);
 
         //Verify, that the testament is fired
         Message msg = m_subscriber.receive(5, TimeUnit.SECONDS);

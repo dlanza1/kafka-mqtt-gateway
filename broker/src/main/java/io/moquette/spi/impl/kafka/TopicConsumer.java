@@ -12,6 +12,7 @@ import org.slf4j.LoggerFactory;
 import io.moquette.spi.IMessagesStore.StoredMessage;
 import io.moquette.spi.impl.ProtocolProcessor;
 import io.moquette.spi.impl.subscriptions.Subscription;
+import kafka.consumer.ConsumerIterator;
 import kafka.consumer.KafkaStream;
 import kafka.message.MessageAndMetadata;
 
@@ -45,7 +46,7 @@ public class TopicConsumer extends Thread {
 		try {
 			for (MessageAndMetadata<byte[], byte[]> msgAndMetadata : stream) {
 				LOG.debug("TopicConsumer: " + getName() + " => New message: " + msgAndMetadata);
-
+				
 				StoredMessage pubMsg = toStoredMessage(msgAndMetadata.message());
 
 				try {

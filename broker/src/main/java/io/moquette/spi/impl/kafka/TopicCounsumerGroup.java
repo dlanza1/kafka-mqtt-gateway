@@ -1,5 +1,7 @@
 package io.moquette.spi.impl.kafka;
 
+import java.math.BigInteger;
+import java.security.SecureRandom;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
@@ -33,7 +35,11 @@ public class TopicCounsumerGroup {
 			Properties props, 
 			String topicFilter) {
 		
-		LOG.debug("New TopicConsumerGroup: " + topicFilter);
+//		TODO remove comment
+//		if(props.getProperty("group.id") == null)
+			props.put("group.id",  new BigInteger(130, new SecureRandom()).toString(32));
+		
+		LOG.debug("New TopicConsumerGroup: " + topicFilter +" (group.id="+props.getProperty("group.id")+")");
 		
 		consumer = kafka.consumer.Consumer.createJavaConsumerConnector(new ConsumerConfig(props));
 		
@@ -58,6 +64,12 @@ public class TopicCounsumerGroup {
 			
 			consumer.start();
 		}
+		
+        //Let consumer threads start
+        //TODO ugly way, use locks
+        try {
+			Thread.sleep(500);
+		} catch (InterruptedException e) {}
 	}
 
 	public synchronized void subscribe(Subscription newSubscription) {

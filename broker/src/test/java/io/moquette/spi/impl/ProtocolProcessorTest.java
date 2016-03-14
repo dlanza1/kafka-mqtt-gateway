@@ -32,9 +32,11 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.Set;
 
 import org.junit.After;
 import org.junit.AfterClass;
@@ -130,16 +132,17 @@ public class ProtocolProcessorTest {
         users.put(TEST_USER, TEST_PWD);
         m_mockAuthenticator = new MockAuthenticator(users);
 
+        m_processor = new ProtocolProcessor();
+        
         props_kafka = new Properties();
         props_kafka.put("zookeeper.connect", "localhost:2181");
         props_kafka.put("metadata.broker.list", "localhost:9092");
         props_kafka.put("group.id", "any");
         producer = new Producer<byte[], byte[]>(new ProducerConfig(props_kafka));
-        consumer = new ConsumerGroup(props_kafka , m_processor);
+        consumer = new ConsumerGroup(props_kafka, m_processor);
         
         subscriptions = new SubscriptionsStore();
         subscriptions.init(memStorage.sessionsStore());
-        m_processor = new ProtocolProcessor();
         
 		m_processor.init(subscriptions, m_messagesStore, m_sessionStore, m_mockAuthenticator, true,
                 new PermitAllAuthorizator(), NO_OBSERVERS_INTERCEPTOR, 
@@ -153,7 +156,7 @@ public class ProtocolProcessorTest {
     	consumer.shutdown();
     	
     	producer = new Producer<byte[], byte[]>(new ProducerConfig(props_kafka));
-        consumer = new ConsumerGroup(props_kafka , m_processor);
+        consumer = new ConsumerGroup(props_kafka, m_processor);
     }
 
     @Test
@@ -220,6 +223,9 @@ public class ProtocolProcessorTest {
             }
         };
         
+        consumer.subscribe(subscription, 1);
+        consumer.subscribe(subscriptionClient2, 1);
+        
         //simulate a connect that register a clientID to an IoSession
         MemoryStorageService storageService = new MemoryStorageService();
         storageService.initStore();
@@ -243,6 +249,8 @@ public class ProtocolProcessorTest {
         connectMessage2.setCleanSession(true);
         m_processor.processConnect(secondReceiverChannel, connectMessage2);
         assertConnAckAccepted(secondReceiverChannel);
+        
+        Thread.sleep(1000);
 
         //Exercise
         ByteBuffer buffer = ByteBuffer.allocate(5).put("Hello".getBytes());
@@ -254,7 +262,8 @@ public class ProtocolProcessorTest {
         msg.setRetainFlag(false);
         NettyUtils.userName(m_channel, "FakeCLI");
         m_processor.processPublish(m_channel, msg);
-
+        
+        Thread.sleep(1000);
 
         //Verify
         firstReceiverChannel.flush();
@@ -368,6 +377,8 @@ public class ProtocolProcessorTest {
         //simulate a connect that register a clientID to an IoSession
         final Subscription subscription = new Subscription(FAKE_PUBLISHER_ID, 
                 FAKE_TOPIC, AbstractMessage.QOSType.MOST_ONE);
+        
+        consumer.subscribe(subscription, 1);
 
         //subscriptions.matches(topic) redefine the method to return true
         SubscriptionsStore subs = new SubscriptionsStore() {
@@ -399,6 +410,7 @@ public class ProtocolProcessorTest {
         pubmsg.setPayload(buffer);
         pubmsg.setRetainFlag(true);
         NettyUtils.clientID(m_channel, FAKE_PUBLISHER_ID);
+        
         m_processor.processPublish(m_channel, pubmsg);
         NettyUtils.cleanSession(m_channel, false);
 
@@ -527,7 +539,6 @@ public class ProtocolProcessorTest {
         subscriptions.add(subQos1.asClientTopicCouple());
         subscriptions.add(subQos2.asClientTopicCouple());
 
-
         ProtocolProcessor processor = new ProtocolProcessor() {
             @Override
             protected void directSend(ClientSession session, String topic, AbstractMessage.QOSType qos, ByteBuffer message,
@@ -544,14 +555,17 @@ public class ProtocolProcessorTest {
         processor.m_clientIDs.put("Sub A", new ConnectionDescriptor("Sub A", null, true));
         processor.m_clientIDs.put("Sub B", new ConnectionDescriptor("Sub B", null, true));
 
-        //Exercise
-        processor.route2Subscribers(Collections.<Subscription> emptySet(), forwardPublish);
+		//Exercise
+        Set<Subscription> set = new HashSet<>();
+        set.add(subQos1);
+        set.add(subQos2);
+        processor.route2Subscribers(set, forwardPublish);
 
         //Verify
         assertEquals(2, publishedForwarded.size());
-        assertEquals(subQos1.getClientId(), publishedForwarded.get(0).getClientID());
-        assertEquals(subQos1.getRequestedQos(), publishedForwarded.get(0).getQos());
-        assertEquals(subQos2.getClientId(), publishedForwarded.get(1).getClientID());
-        assertEquals(subQos2.getRequestedQos(), publishedForwarded.get(1).getQos());
+        assertEquals(subQos1.getClientId(), publishedForwarded.get(1).getClientID());
+        assertEquals(subQos1.getRequestedQos(), publishedForwarded.get(1).getQos());
+        assertEquals(subQos2.getClientId(), publishedForwarded.get(0).getClientID());
+        assertEquals(subQos2.getRequestedQos(), publishedForwarded.get(0).getQos());
     }
 }

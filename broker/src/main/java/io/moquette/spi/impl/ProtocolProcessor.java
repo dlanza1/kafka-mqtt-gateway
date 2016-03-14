@@ -766,12 +766,13 @@ public class ProtocolProcessor {
         if (LOG.isTraceEnabled()) {
             LOG.trace("subscription tree {}", subscriptions.dumpTree());
         }
-        channel.writeAndFlush(ackMessage);
 
         //fire the publish
         for(Subscription subscription : newSubscriptions) {
             subscribeSingleTopic(subscription);
         }
+        
+        channel.writeAndFlush(ackMessage);
     }
     
     private boolean subscribeSingleTopic(final Subscription newSubscription) {
@@ -789,10 +790,12 @@ public class ProtocolProcessor {
         ClientSession targetSession = m_sessionsStore.sessionForClient(newSubscription.getClientId());
         verifyToActivate(newSubscription.getClientId(), targetSession);
         for (IMessagesStore.StoredMessage storedMsg : messages) {
-            //fire the as retained the message
+        	//fire the as retained the message
             LOG.debug("send publish message for topic {}", newSubscription.getTopicFilter());
-
-			producer.send(toKeyedMessage(storedMsg));
+            //forwardPublishQoS0(newSubscription.getClientId(), storedMsg.getTopic(), storedMsg.getQos(), storedMsg.getPayload(), true);
+            Integer packetID = storedMsg.getQos() == QOSType.MOST_ONE ? null :
+                    targetSession.nextPacketId();
+            directSend(targetSession, storedMsg.getTopic(), storedMsg.getQos(), storedMsg.getPayload(), true, packetID);
         }
 
         //notify the Observables

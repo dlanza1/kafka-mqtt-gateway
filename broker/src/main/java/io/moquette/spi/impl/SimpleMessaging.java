@@ -18,10 +18,13 @@ package io.moquette.spi.impl;
 import io.moquette.BrokerConstants;
 import io.moquette.spi.IMessagesStore;
 import io.moquette.interception.InterceptHandler;
+import io.moquette.parser.proto.messages.AbstractMessage.QOSType;
 import io.moquette.server.config.IConfig;
 import io.moquette.spi.ISessionsStore;
+import io.moquette.spi.ISessionsStore.ClientTopicCouple;
 import io.moquette.spi.impl.kafka.ConsumerGroup;
 import io.moquette.spi.impl.security.*;
+import io.moquette.spi.impl.subscriptions.Subscription;
 import io.moquette.spi.impl.subscriptions.SubscriptionsStore;
 import io.moquette.spi.persistence.MapDBPersistentStore;
 import io.moquette.spi.security.IAuthenticator;
@@ -172,6 +175,12 @@ public class SimpleMessaging {
         Producer<byte[], byte[]> producer = new Producer<byte[], byte[]>(new ProducerConfig(props_kafka));
         
         ConsumerGroup consumerGroup = new ConsumerGroup(props_kafka, m_processor);
+        for (ClientTopicCouple subscription : sessionsStore.listAllSubscriptions()) {
+        	consumerGroup.subscribe(new Subscription(
+        			subscription.clientID, 
+        			subscription.topicFilter, 
+        			QOSType.LEAST_ONE), 1);
+		}
 		
         boolean allowAnonymous = Boolean.parseBoolean(props.getProperty(BrokerConstants.ALLOW_ANONYMOUS_PROPERTY_NAME, "true"));
         m_processor.init(subscriptions, 

@@ -112,10 +112,9 @@ public class ServerIntegrationQoSValidationTest {
     public void checkSubscriberQoS0ReceiveQoS0publishes() throws Exception {
         LOG.info("*** checkSubscriberQoS0ReceiveQoS0publishes ***");        
         m_subscriber.subscribe("/topic", 0);
-        
         m_publisher.publish("/topic", "Hello world MQTT QoS0".getBytes(), 0, false);
         
-        MqttMessage message = m_callback.getMessage(5);
+        MqttMessage message = m_callback.getMessage(2);
         
         Assert.assertNotNull(message);
         assertEquals("Hello world MQTT QoS0", message.toString());
@@ -125,8 +124,7 @@ public class ServerIntegrationQoSValidationTest {
     @Test
     public void checkSubscriberQoS0ReceiveQoS1publishes_downgrade() throws Exception {
         LOG.info("*** checkSubscriberQoS0ReceiveQoS1publishes_downgrade ***");
-        m_subscriber.subscribe("/topic", 0);
-        
+        m_subscriber.subscribe("/topic", 0);        
         m_publisher.publish("/topic", "Hello world MQTT QoS1".getBytes(), 1, false);
         
         MqttMessage message = m_callback.getMessage(2);
@@ -140,7 +138,6 @@ public class ServerIntegrationQoSValidationTest {
     public void checkSubscriberQoS0ReceiveQoS2publishes_downgrade() throws Exception {
         LOG.info("*** checkSubscriberQoS0ReceiveQoS2publishes_downgrade ***");
         m_subscriber.subscribe("/topic", 0);
-        
         m_publisher.publish("/topic", "Hello world MQTT QoS2".getBytes(), 2, false);
         
         MqttMessage message = m_callback.getMessage(2);
@@ -154,7 +151,6 @@ public class ServerIntegrationQoSValidationTest {
     public void checkSubscriberQoS1ReceiveQoS0publishes() throws Exception {
         LOG.info("*** checkSubscriberQoS1ReceiveQoS0publishes ***");
         m_subscriber.subscribe("/topic", 1);
-        
         m_publisher.publish("/topic", "Hello world MQTT QoS0".getBytes(), 0, false);
         
         MqttMessage message = m_callback.getMessage(2);
@@ -168,7 +164,6 @@ public class ServerIntegrationQoSValidationTest {
     public void checkSubscriberQoS1ReceiveQoS1publishes() throws Exception {
         LOG.info("*** checkSubscriberQoS1ReceiveQoS1publishes ***");
         m_subscriber.subscribe("/topic", 1);
-        
         m_publisher.publish("/topic", "Hello world MQTT QoS1".getBytes(), 1, false);
 
         MqttMessage message = m_callback.getMessage(2);
@@ -182,7 +177,6 @@ public class ServerIntegrationQoSValidationTest {
     public void checkSubscriberQoS1ReceiveQoS2publishes_downgrade() throws Exception {
         LOG.info("*** checkSubscriberQoS1ReceiveQoS2publishes_downgrade ***");
         m_subscriber.subscribe("/topic", 1);
-        
         m_publisher.publish("/topic", "Hello world MQTT QoS2".getBytes(), 2, false);
 
         MqttMessage message = m_callback.getMessage(2);
@@ -196,7 +190,6 @@ public class ServerIntegrationQoSValidationTest {
     public void checkSubscriberQoS2ReceiveQoS0publishes() throws Exception {
         LOG.info("*** checkSubscriberQoS2ReceiveQoS0publishes ***");
         m_subscriber.subscribe("/topic", 2);
-        
         m_publisher.publish("/topic", "Hello world MQTT QoS2".getBytes(), 0, false);
 
         MqttMessage message = m_callback.getMessage(2);
@@ -210,7 +203,6 @@ public class ServerIntegrationQoSValidationTest {
     public void checkSubscriberQoS2ReceiveQoS1publishes() throws Exception {
         LOG.info("*** checkSubscriberQoS2ReceiveQoS1publishes ***");
         m_subscriber.subscribe("/topic", 2);
-        
         m_publisher.publish("/topic", "Hello world MQTT QoS2".getBytes(), 1, false);
 
         MqttMessage message = m_callback.getMessage(2);
@@ -224,7 +216,6 @@ public class ServerIntegrationQoSValidationTest {
     public void checkSubscriberQoS2ReceiveQoS2publishes() throws Exception {
         LOG.info("*** checkSubscriberQoS2ReceiveQoS2publishes ***");
         m_subscriber.subscribe("/topic", 2);
-        
         m_publisher.publish("/topic", "Hello world MQTT QoS2".getBytes(), 2, false);
 
         MqttMessage message = m_callback.getMessage(2);
