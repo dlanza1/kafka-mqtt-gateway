@@ -653,11 +653,11 @@ public class ServerIntegrationPahoTest {
         MqttConnectOptions options = new MqttConnectOptions();
         options.setCleanSession(false);
         m_client.connect(options);
-        m_client.subscribe("a/+", 2);
-        m_client.subscribe("a/b", 1);
+        m_client.subscribe("aa/+", 2);
+        m_client.subscribe("aa/bb", 1);
 
         //force the publisher to send
-        m_publisher.publish("a/b", "Hello world MQTT!!".getBytes(), 1, false);
+        m_publisher.publish("aa/bb", "Hello world MQTT!!".getBytes(), 1, false);
 
         //reconnect and expect to receive the hello 2 message
         MqttMessage msg = messagesCollector.getMessage(1);

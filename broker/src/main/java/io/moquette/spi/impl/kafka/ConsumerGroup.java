@@ -1,5 +1,7 @@
 package io.moquette.spi.impl.kafka;
 
+import java.math.BigInteger;
+import java.security.SecureRandom;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Properties;
@@ -25,6 +27,9 @@ public class ConsumerGroup {
 		
 		this.protocolProcessor = protocolProcessor;
 		this.props = props;
+		
+		if(!props.containsKey("group.id"))
+			props.put("group.id",  new BigInteger(130, new SecureRandom()).toString(32));
 	}
 
 	public synchronized void shutdown() {

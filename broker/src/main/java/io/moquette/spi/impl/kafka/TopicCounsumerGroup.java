@@ -1,7 +1,5 @@
 package io.moquette.spi.impl.kafka;
 
-import java.math.BigInteger;
-import java.security.SecureRandom;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
@@ -37,9 +35,6 @@ public class TopicCounsumerGroup {
 			Properties props, 
 			String topicFilter) {
 		
-		if(!props.containsKey("group.id"))
-			props.put("group.id",  new BigInteger(130, new SecureRandom()).toString(32));
-		
 		LOG.debug("New TopicConsumerGroup: " + topicFilter +" (group.id="+props.getProperty("group.id")+")");
 		
 		consumer = kafka.consumer.Consumer.createJavaConsumerConnector(new ConsumerConfig(props));
@@ -54,7 +49,7 @@ public class TopicCounsumerGroup {
 		
 		List<KafkaStream<byte[], byte[]>> streams = 
 				consumer.createMessageStreamsByFilter(
-				new Whitelist(topicFilter.replaceAll("/", ".")), 
+				new Whitelist(toKafkaTopicFilter(topicFilter)), 
 				numThreads);
 		
 		int threadIdx = 0;
@@ -71,6 +66,16 @@ public class TopicCounsumerGroup {
         try {
 			Thread.sleep(500);
 		} catch (InterruptedException e) {}
+	}
+
+	public static String toKafkaTopicFilter(String mqttTopicFilter) {
+		if(mqttTopicFilter.equals("#"))
+			return ".*";
+		
+		return mqttTopicFilter
+				.replaceAll("/", ".")
+				.replaceAll("\\+", "[^.]+")
+				.replaceAll("#", "*");
 	}
 
 	public synchronized void subscribe(Subscription newSubscription) {
