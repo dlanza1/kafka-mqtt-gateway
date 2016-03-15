@@ -22,21 +22,22 @@ public class TopicCounsumerGroup {
 	
 	private static final Logger LOG = LoggerFactory.getLogger(TopicCounsumerGroup.class);
 
-	private HashSet<Subscription> subscriptions = new HashSet<Subscription>();
+	private Set<Subscription> subscriptions = new HashSet<Subscription>();
 
 	private ConsumerConnector consumer;
 
 	private String topicFilter;
 
 	private ProtocolProcessor protocolProcessor;
+
+	private final String groupId;
 	
 	public TopicCounsumerGroup(
 			ProtocolProcessor protocolProcessor,
 			Properties props, 
 			String topicFilter) {
 		
-//		TODO remove comment
-//		if(props.getProperty("group.id") == null)
+		if(!props.containsKey("group.id"))
 			props.put("group.id",  new BigInteger(130, new SecureRandom()).toString(32));
 		
 		LOG.debug("New TopicConsumerGroup: " + topicFilter +" (group.id="+props.getProperty("group.id")+")");
@@ -44,7 +45,8 @@ public class TopicCounsumerGroup {
 		consumer = kafka.consumer.Consumer.createJavaConsumerConnector(new ConsumerConfig(props));
 		
 		this.topicFilter = topicFilter;
-		this.protocolProcessor = protocolProcessor;		
+		this.protocolProcessor = protocolProcessor;
+		this.groupId = props.getProperty("group.id");
 	}
 	
 	public synchronized void init(int numThreads) {
@@ -59,7 +61,6 @@ public class TopicCounsumerGroup {
 		for (final KafkaStream<byte[], byte[]> stream : streams) {
 			TopicConsumer consumer = new TopicConsumer(protocolProcessor, 
 					stream, 
-					subscriptions,
 					topicFilter+"-"+threadIdx);
 			consumer.setPriority(Thread.MAX_PRIORITY);
 			consumer.start();
@@ -100,6 +101,10 @@ public class TopicCounsumerGroup {
 	public void shutdown() {
 		if(consumer != null)
 			consumer.shutdown();
+	}
+	
+	public String getGroupId(){
+		return groupId;
 	}
 	
 }

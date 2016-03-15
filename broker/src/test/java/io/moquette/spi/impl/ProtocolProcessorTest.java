@@ -32,11 +32,9 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
-import java.util.Set;
 
 import org.junit.After;
 import org.junit.AfterClass;
@@ -556,16 +554,13 @@ public class ProtocolProcessorTest {
         processor.m_clientIDs.put("Sub B", new ConnectionDescriptor("Sub B", null, true));
 
 		//Exercise
-        Set<Subscription> set = new HashSet<>();
-        set.add(subQos1);
-        set.add(subQos2);
-        processor.route2Subscribers(set, forwardPublish);
+        processor.route2Subscribers(forwardPublish);
 
         //Verify
         assertEquals(2, publishedForwarded.size());
-        assertEquals(subQos1.getClientId(), publishedForwarded.get(1).getClientID());
-        assertEquals(subQos1.getRequestedQos(), publishedForwarded.get(1).getQos());
-        assertEquals(subQos2.getClientId(), publishedForwarded.get(0).getClientID());
-        assertEquals(subQos2.getRequestedQos(), publishedForwarded.get(0).getQos());
+        assertEquals(subQos1.getClientId(), publishedForwarded.get(0).getClientID());
+        assertEquals(subQos1.getRequestedQos(), publishedForwarded.get(0).getQos());
+        assertEquals(subQos2.getClientId(), publishedForwarded.get(1).getClientID());
+        assertEquals(subQos2.getRequestedQos(), publishedForwarded.get(1).getQos());
     }
 }
