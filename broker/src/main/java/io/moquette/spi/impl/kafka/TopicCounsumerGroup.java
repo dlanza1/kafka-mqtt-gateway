@@ -47,7 +47,7 @@ public class TopicCounsumerGroup {
 		this.protocolProcessor = protocolProcessor;		
 	}
 	
-	public synchronized void ini(int numThreads) {
+	public synchronized void init(int numThreads) {
 		LOG.debug("Initializing...");
 		
 		List<KafkaStream<byte[], byte[]>> streams = 
@@ -61,7 +61,7 @@ public class TopicCounsumerGroup {
 					stream, 
 					subscriptions,
 					topicFilter+"-"+threadIdx);
-			
+			consumer.setPriority(Thread.MAX_PRIORITY);
 			consumer.start();
 		}
 		

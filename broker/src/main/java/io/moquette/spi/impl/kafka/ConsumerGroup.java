@@ -42,21 +42,21 @@ public class ConsumerGroup {
 		
 		String topicFilter = newSubscription.getTopicFilter();
 		
-		TopicCounsumerGroup threadGroup;
+		TopicCounsumerGroup topicConsumerGroup;
 		if(threadGroups.containsKey(topicFilter)){
-			threadGroup = threadGroups.get(topicFilter);
+			topicConsumerGroup = threadGroups.get(topicFilter);
 
-			threadGroup.subscribe(newSubscription);
+			topicConsumerGroup.subscribe(newSubscription);
 		}else{
-			threadGroup = new TopicCounsumerGroup(
+			topicConsumerGroup = new TopicCounsumerGroup(
 					protocolProcessor,
 					props, 
 					topicFilter);
 			
-			threadGroup.subscribe(newSubscription);
-			threadGroup.ini(1);
+			topicConsumerGroup.subscribe(newSubscription);
+			topicConsumerGroup.init(1);
 						
-			threadGroups.put(topicFilter, threadGroup);
+			threadGroups.put(topicFilter, topicConsumerGroup);
 		}
 	}
 	
