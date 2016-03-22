@@ -307,8 +307,9 @@ public class ProtocolProcessor {
 
         LOG.info("republishing stored messages to client <{}>", clientSession.clientID);
         for (IMessagesStore.StoredMessage pubEvt : publishedEvents) {
-			producer.send(toKeyedMessage(pubEvt));
-            
+        	//TODO put in flight zone
+            directSend(clientSession, pubEvt.getTopic(), pubEvt.getQos(),
+                    pubEvt.getMessage(), false, pubEvt.getMessageID());
             clientSession.removeEnqueued(pubEvt.getGuid());
         }
     }

@@ -384,6 +384,8 @@ public class ServerIntegrationPahoTest {
         MqttMessage message = m_messagesCollector.getMessage(true);
         assertNotNull(message);
         assertEquals("Hello MQTT", message.toString());
+        message = m_messagesCollector.getMessage(true);
+        assertNull(message);
     }
 
     @Test
